@@ -12,7 +12,7 @@ NC='\033[0m' # No Color
 RAW_INSTALL="https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/main/install.sh"
 RAW_SCRIPT="https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/main/ping-status"
 RAW_CONFIG="https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/main/ping_status.conf"
-THEMES_BASE_URL="https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/main/themes/"
+THEMES_BASE_URL="https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/main/theme/"
 
 # Available themes
 declare -A THEMES=(
