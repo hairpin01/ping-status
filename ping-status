@@ -4,7 +4,19 @@ import os
 import sys
 import subprocess
 import configparser
+import argparse
+import urllib.request
+import tempfile
+import hashlib
 from pathlib import Path
+
+__version__ = "2.1.0"
+__author__ = "hairpin01"
+
+# URLs для обновления
+RAW_INSTALL = "https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/main/install.sh"
+RAW_SCRIPT = "https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/main/ping-status"
+RAW_CONFIG = "https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/main/ping_status.conf"
 
 def get_color_code(color):
     colors = {
@@ -22,6 +34,9 @@ def get_color_code(color):
 
 def colorize(text, color):
     return f'\033[{get_color_code(color)}m{text}\033[0m'
+
+def print_colored(text, color='white'):
+    print(colorize(text, color))
 
 def get_ping(host):
     try:
@@ -57,7 +72,7 @@ def get_uptime():
     except:
         return "unknown"
 
-def main():
+def load_config():
     config_path = Path.home() / '.config' / 'ping-status.conf'
     
     if not config_path.exists():
@@ -74,17 +89,239 @@ def main():
     user_color = config.get('colors', 'user', fallback='blue')
     hostname_color = config.get('colors', 'hostname', fallback='cyan')
     
-    ping_value = get_ping(host)
+    return {
+        'host': host,
+        'template': template,
+        'colors': {
+            'ping': ping_color,
+            'uptime': uptime_color,
+            'user': user_color,
+            'hostname': hostname_color
+        }
+    }
+
+def show_status():
+    config = load_config()
+    
+    ping_value = get_ping(config['host'])
     uptime_value = get_uptime()
     user_value = os.getlogin()
     hostname_value = subprocess.run(['hostname'], capture_output=True, text=True).stdout.strip()
     
-    output = template.replace('{ping}', colorize(ping_value, ping_color))
-    output = output.replace('{uptime}', colorize(uptime_value, uptime_color))
-    output = output.replace('{user}', colorize(user_value, user_color))
-    output = output.replace('{hostname}', colorize(hostname_value, hostname_color))
+    output = config['template'].replace('{ping}', colorize(ping_value, config['colors']['ping']))
+    output = output.replace('{uptime}', colorize(uptime_value, config['colors']['uptime']))
+    output = output.replace('{user}', colorize(user_value, config['colors']['user']))
+    output = output.replace('{hostname}', colorize(hostname_value, config['colors']['hostname']))
     
     print(output)
+
+def download_file(url, dest_path):
+    """Скачать файл по URL"""
+    try:
+        with urllib.request.urlopen(url) as response:
+            content = response.read()
+            with open(dest_path, 'wb') as f:
+                f.write(content)
+        return True
+    except Exception as e:
+        print_colored(f"Ошибка загрузки {url}: {e}", 'red')
+        return False
+
+def get_remote_version():
+    """Получить версию с удаленного репозитория"""
+    try:
+        # Попробуем получить версию из удаленного скрипта
+        with urllib.request.urlopen(RAW_SCRIPT) as response:
+            content = response.read().decode('utf-8')
+            for line in content.split('\n'):
+                if line.startswith('__version__'):
+                    return line.split('=')[1].strip().strip("'\"")
+    except:
+        pass
+    return None
+
+def check_update():
+    """Проверить наличие обновлений"""
+    print_colored("🔍 Проверка обновлений...", 'yellow')
+    
+    remote_version = get_remote_version()
+    if not remote_version:
+        print_colored("❌ Не удалось проверить обновления", 'red')
+        return False
+    
+    print_colored(f"Локальная версия: {__version__}", 'blue')
+    print_colored(f"Удаленная версия: {remote_version}", 'blue')
+    
+    if remote_version != __version__:
+        print_colored("✅ Доступно обновление!", 'green')
+        return True
+    else:
+        print_colored("✅ У вас актуальная версия", 'green')
+        return False
+
+def perform_update():
+    """Выполнить обновление"""
+    print_colored("🔄 Начало обновления...", 'yellow')
+    
+    # Проверить права
+    if os.geteuid() != 0:
+        print_colored("❌ Для обновления требуются права root. Запустите с sudo.", 'red')
+        return False
+    
+    # Создать временную директорию
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_script = os.path.join(temp_dir, 'ping-status')
+        temp_config = os.path.join(temp_dir, 'ping-status.conf')
+        
+        # Скачать новый скрипт
+        print_colored("📥 Загрузка нового скрипта...", 'yellow')
+        if not download_file(RAW_SCRIPT, temp_script):
+            return False
+        
+        # Скачать новый конфиг
+        print_colored("📥 Загрузка нового конфига...", 'yellow')
+        if not download_file(RAW_CONFIG, temp_config):
+            return False
+        
+        # Сделать скрипт исполняемым
+        os.chmod(temp_script, 0o755)
+        
+        # Создать резервные копии
+        print_colored("💾 Создание резервных копий...", 'yellow')
+        backup_dir = Path('/tmp/ping-status-backup')
+        backup_dir.mkdir(exist_ok=True)
+        
+        script_path = Path('/usr/local/bin/ping-status')
+        config_path = Path('/etc/ping-status.conf')
+        
+        if script_path.exists():
+            script_path.rename(backup_dir / 'ping-status.backup')
+        if config_path.exists():
+            config_path.rename(backup_dir / 'ping-status.conf.backup')
+        
+        # Установить новые файлы
+        print_colored("⚙️ Установка новых файлов...", 'yellow')
+        try:
+            # Установить скрипт
+            subprocess.run(['cp', temp_script, '/usr/local/bin/ping-status'], check=True)
+            subprocess.run(['chmod', '+x', '/usr/local/bin/ping-status'], check=True)
+            
+            # Установить конфиг
+            subprocess.run(['cp', temp_config, '/etc/ping-status.conf'], check=True)
+            
+            # Обновить симлинк
+            symlink_path = Path('/usr/local/bin/p')
+            if symlink_path.exists():
+                symlink_path.unlink()
+            symlink_path.symlink_to('/usr/local/bin/ping-status')
+            
+            print_colored("✅ Обновление завершено успешно!", 'green')
+            print_colored(f"📁 Резервные копии сохранены в: {backup_dir}", 'blue')
+            return True
+            
+        except Exception as e:
+            print_colored(f"❌ Ошибка при установке: {e}", 'red')
+            
+            # Восстановить из бэкапа
+            print_colored("🔄 Восстановление из резервной копии...", 'yellow')
+            backup_script = backup_dir / 'ping-status.backup'
+            backup_config = backup_dir / 'ping-status.conf.backup'
+            
+            if backup_script.exists():
+                backup_script.rename('/usr/local/bin/ping-status')
+            if backup_config.exists():
+                backup_config.rename('/etc/ping-status.conf')
+            
+            return False
+
+def uninstall():
+    """Удалить ping-status"""
+    print_colored("🗑️ Удаление ping-status...", 'yellow')
+    
+    # Проверить права
+    if os.geteuid() != 0:
+        print_colored("❌ Для удаления требуются права root. Запустите с sudo.", 'red')
+        return False
+    
+    files_to_remove = [
+        '/usr/local/bin/ping-status',
+        '/usr/local/bin/p',
+        '/etc/ping-status.conf'
+    ]
+    
+    user_config = Path.home() / '.config' / 'ping-status.conf'
+    
+    print_colored("Следующие файлы будут удалены:", 'red')
+    for file in files_to_remove:
+        if os.path.exists(file):
+            print_colored(f"  - {file}", 'red')
+    
+    if user_config.exists():
+        print_colored(f"  - {user_config} (пользовательский конфиг)", 'red')
+    
+    # Подтверждение
+    try:
+        confirm = input("\nВы уверены? (y/N): ").strip().lower()
+        if confirm != 'y':
+            print_colored("❌ Удаление отменено", 'yellow')
+            return False
+    except KeyboardInterrupt:
+        print_colored("\n❌ Удаление отменено", 'yellow')
+        return False
+    
+    # Удаление файлов
+    removed_files = []
+    for file in files_to_remove:
+        try:
+            if os.path.exists(file) or os.path.islink(file):
+                if os.path.islink(file):
+                    os.unlink(file)
+                else:
+                    os.remove(file)
+                removed_files.append(file)
+                print_colored(f"✅ Удален: {file}", 'green')
+        except Exception as e:
+            print_colored(f"❌ Ошибка удаления {file}: {e}", 'red')
+    
+    # Предложение удалить пользовательский конфиг
+    if user_config.exists():
+        try:
+            remove_user_config = input(f"\nУдалить пользовательский конфиг {user_config}? (y/N): ").strip().lower()
+            if remove_user_config == 'y':
+                user_config.unlink()
+                print_colored(f"✅ Удален: {user_config}", 'green')
+        except Exception as e:
+            print_colored(f"❌ Ошибка удаления {user_config}: {e}", 'red')
+    
+    print_colored(f"\n✅ Удалено файлов: {len(removed_files)}", 'green')
+    print_colored("🎯 Программа удалена. Для повторной установки запустите установщик.", 'blue')
+    return True
+
+def show_version():
+    """Показать информацию о версии"""
+    print_colored(f"Ping Status Monitor v{__version__}", 'cyan')
+    print_colored(f"Автор: {__author__}", 'blue')
+    print_colored("GitHub: https://github.com/hairpin01/ping-status", 'blue')
+
+def main():
+    parser = argparse.ArgumentParser(description='Ping Status Monitor')
+    parser.add_argument('--version', '-v', action='store_true', help='Показать версию')
+    parser.add_argument('--check-update', action='store_true', help='Проверить обновления')
+    parser.add_argument('--update', action='store_true', help='Обновить программу')
+    parser.add_argument('--uninstall', action='store_true', help='Удалить программу')
+    
+    args = parser.parse_args()
+    
+    if args.version:
+        show_version()
+    elif args.check_update:
+        check_update()
+    elif args.update:
+        perform_update()
+    elif args.uninstall:
+        uninstall()
+    else:
+        show_status()
 
 if __name__ == '__main__':
     main()
