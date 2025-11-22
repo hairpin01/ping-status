@@ -8,8 +8,8 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # URLs
-SCRIPT_URL="https://x0.at/rKXy.txt"
-CONFIG_URL="https://x0.at/9bzQ.conf"
+SCRIPT_URL="https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/main/ping-status"
+CONFIG_URL="https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/main/ping_status.conf"
 
 # Function to print colored output
 print_status() {
