@@ -1,69 +1,67 @@
-# ping-status
+### ping-status
+> [Telegram,
+> hairpin](t.me/Hairpin00)
 
-
-### 📦 Installation
-Automatic installation (recommended)
+# 📦 Installation
 ```bash
 # Download the
-curl -O installer https://raw.githubusercontent.com/your-username/ping-status/main/install-ping-status.sh
-
-# Or via wget
-wget https://raw.githubusercontent.com/your-username/ping-status/main/install-ping-status.sh
-
-# Run
-the chmod +x installation install-ping-status.sh
-./install-ping-status.sh
+curl -O installer https://raw.githubusercontent.com/your-username/ping-status/main/install.sh
 ```
-### Installation options
+> [!NOTE]
+> Or via wget `wget https://raw.githubusercontent.com/your-username/ping-status/main/install.sh`
+# Run the
+`chmod +x installation install.sh`
 
-```bash
-# Complete installation with test
-./install-ping-status.sh
+`./install.sh`
 
-# Skip installing dependencies
-./install-ping-status.sh --skip-deps
+# Installation options
+ Skip installing dependencies `--skip-deps`
+ Update the configuration only `--config-only`
+ Update an existing installation `--update`
+> [!TIP]
+> Show the help
+> `./install --help`
 
-# Update the configuration
-only./install-ping-status.sh --config-only
+1. After installation, simply run: `p`
+2. Or a full team: `ping-status`
 
-# Update an existing installation
-./install-ping-status.sh --update
-
-# Show the help
-./install-ping-status.sh --help
-```
-
-After installation, simply run:
-```bash
-p
-```
-Or a full team:
-```bash
-ping-status
-```
-Output example:
+> [!NOTE] 
+> Output example:
 ```output
 ════════════════════════════════
 🖥️  System Status  
 ════════════════════════════════
-Ping: 24.5 ms
-Uptime: 2h 15m
+Ping: XXX ms
+Uptime: XXh XXm 
 User: archuser
 Hostname: arch-pc
-════════════════════════════════
+═══════════════════════════════
 ```
-Output Settings
-Edit the ~/.config/ping-status.conf file
+> [!TIP]
+> Output Settings
+> Edit the ~/.config/ping-status.conf file
 
-### 🔄 Update
-```bash
-./install-ping-status.sh --update
+# 🔄 Update
 ```
-Troubleshooting
+./install --update
+```
+# Troubleshooting
 The command was not found
-```bash
+```
 # Update the command cache
 hash -r
 # Or run the full path
 /usr/local/bin/p
 ```
+
+# Removal:
+1. Through the installer
+`./install.sh --uninstall`
+
+2. Via the script
+`sudo ping-status --uninstall`
+
+> [!TIP]
+> Checking for updates:
+> `ping-status --check-update`
+> Show the version: `ping-status --version`
