@@ -74,7 +74,7 @@ Installation with a `theme`:
 ```
 ```
 # Install with a modern theme 
-./install.sh --theme modern
+./install.sh --theme classic
 ```
 > [!TIP]
 > Install with the theme from the URL
