@@ -5,10 +5,10 @@
 # 📦 Installation
 ```bash
 # Download the
-curl -O installer https://raw.githubusercontent.com/your-username/ping-status/main/install.sh
+curl -O installer https://raw.githubusercontent.com/hairpin01/ping-status/main/install.sh
 ```
 > [!NOTE]
-> Or via wget `wget https://raw.githubusercontent.com/your-username/ping-status/main/install.sh`
+> Or via wget `wget https://raw.githubusercontent.com/hairpin01/ping-status/main/install.sh`
 # Run the
 `chmod +x installation install.sh`
 
