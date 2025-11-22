@@ -18,7 +18,7 @@ __author__ = "hairpin01"
 RAW_INSTALL = "https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/main/install.sh"
 RAW_SCRIPT = "https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/main/ping-status"
 RAW_CONFIG = "https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/main/ping_status.conf"
-THEMES_BASE_URL = "https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/main/themes/"
+THEMES_BASE_URL = "https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/main/theme/"
 
 # Доступные темы
 AVAILABLE_THEMES = {
