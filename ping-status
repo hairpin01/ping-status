@@ -204,20 +204,23 @@ def perform_update():
         script_path = Path('/usr/local/bin/ping-status')
         config_path = Path('/etc/ping-status.conf')
         
+        # Использовать copy2 вместо rename для кросс-файловой системы
+        import shutil
+        
         if script_path.exists():
-            script_path.rename(backup_dir / 'ping-status.backup')
+            shutil.copy2(str(script_path), str(backup_dir / 'ping-status.backup'))
         if config_path.exists():
-            config_path.rename(backup_dir / 'ping-status.conf.backup')
+            shutil.copy2(str(config_path), str(backup_dir / 'ping-status.conf.backup'))
         
         # Установить новые файлы
         print_colored("⚙️ Установка новых файлов...", 'yellow')
         try:
             # Установить скрипт
-            subprocess.run(['cp', temp_script, '/usr/local/bin/ping-status'], check=True)
-            subprocess.run(['chmod', '+x', '/usr/local/bin/ping-status'], check=True)
+            shutil.copy2(temp_script, '/usr/local/bin/ping-status')
+            os.chmod('/usr/local/bin/ping-status', 0o755)
             
             # Установить конфиг
-            subprocess.run(['cp', temp_config, '/etc/ping-status.conf'], check=True)
+            shutil.copy2(temp_config, '/etc/ping-status.conf')
             
             # Обновить симлинк
             symlink_path = Path('/usr/local/bin/p')
@@ -237,10 +240,17 @@ def perform_update():
             backup_script = backup_dir / 'ping-status.backup'
             backup_config = backup_dir / 'ping-status.conf.backup'
             
-            if backup_script.exists():
-                backup_script.rename('/usr/local/bin/ping-status')
-            if backup_config.exists():
-                backup_config.rename('/etc/ping-status.conf')
+            try:
+                if backup_script.exists():
+                    shutil.copy2(str(backup_script), '/usr/local/bin/ping-status')
+                    os.chmod('/usr/local/bin/ping-status', 0o755)
+                if backup_config.exists():
+                    shutil.copy2(str(backup_config), '/etc/ping-status.conf')
+                
+                print_colored("✅ Восстановление завершено", 'green')
+            except Exception as restore_error:
+                print_colored(f"❌ Ошибка восстановления: {restore_error}", 'red')
+                print_colored("⚠️  Требуется ручное восстановление из бэкапа", 'yellow')
             
             return False
 
