@@ -1,0 +1,90 @@
+#!/usr/bin/env python3
+
+import os
+import sys
+import subprocess
+import configparser
+from pathlib import Path
+
+def get_color_code(color):
+    colors = {
+        'black': '30',
+        'red': '31',
+        'green': '32',
+        'yellow': '33',
+        'blue': '34',
+        'magenta': '35',
+        'cyan': '36',
+        'white': '37',
+        'reset': '0'
+    }
+    return colors.get(color.lower(), '37')
+
+def colorize(text, color):
+    return f'\033[{get_color_code(color)}m{text}\033[0m'
+
+def get_ping(host):
+    try:
+        result = subprocess.run(
+            ['ping', '-c', '1', '-W', '1', host],
+            capture_output=True,
+            text=True,
+            timeout=3
+        )
+        if result.returncode == 0:
+            time_line = [line for line in result.stdout.split('\n') if 'time=' in line][0]
+            ping_time = time_line.split('time=')[1].split(' ')[0]
+            return ping_time
+        return "unreachable"
+    except:
+        return "timeout"
+
+def get_uptime():
+    try:
+        with open('/proc/uptime', 'r') as f:
+            uptime_seconds = float(f.readline().split()[0])
+        
+        days = int(uptime_seconds // 86400)
+        hours = int((uptime_seconds % 86400) // 3600)
+        minutes = int((uptime_seconds % 3600) // 60)
+        
+        if days > 0:
+            return f"{days}d {hours}h {minutes}m"
+        elif hours > 0:
+            return f"{hours}h {minutes}m"
+        else:
+            return f"{minutes}m"
+    except:
+        return "unknown"
+
+def main():
+    config_path = Path.home() / '.config' / 'ping-status.conf'
+    
+    if not config_path.exists():
+        config_path = Path('/etc/ping-status.conf')
+    
+    config = configparser.ConfigParser()
+    config.read(config_path)
+    
+    host = config.get('settings', 'host', fallback='google.com')
+    template = config.get('settings', 'text', fallback='Ping: {ping}\nUptime: {uptime}\nUser: {user}\nHostname: {hostname}')
+    
+    ping_color = config.get('colors', 'ping', fallback='green')
+    uptime_color = config.get('colors', 'uptime', fallback='yellow')
+    user_color = config.get('colors', 'user', fallback='blue')
+    hostname_color = config.get('colors', 'hostname', fallback='cyan')
+    
+    ping_value = get_ping(host)
+    uptime_value = get_uptime()
+    user_value = os.getlogin()
+    hostname_value = subprocess.run(['hostname'], capture_output=True, text=True).stdout.strip()
+    
+    output = template.replace('{ping}', colorize(ping_value, ping_color))
+    output = output.replace('{uptime}', colorize(uptime_value, uptime_color))
+    output = output.replace('{user}', colorize(user_value, user_color))
+    output = output.replace('{hostname}', colorize(hostname_value, hostname_color))
+    
+    print(output)
+
+if __name__ == '__main__':
+    main()
