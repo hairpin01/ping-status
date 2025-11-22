@@ -5,12 +5,23 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
+CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
 # URLs
 RAW_INSTALL="https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/main/install.sh"
 RAW_SCRIPT="https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/main/ping-status"
 RAW_CONFIG="https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/main/ping_status.conf"
+THEMES_BASE_URL="https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/main/themes/"
+
+# Available themes
+declare -A THEMES=(
+    ["minimal"]="Минималистичная тема в одну строку"
+    ["detailed"]="Подробная тема с рамкой"
+    ["modern"]="Современная тема с иконками" 
+    ["classic"]="Классическая тема"
+    ["terminal"]="Тема в стиле терминала"
+)
 
 # Function to print colored output
 print_status() {
@@ -27,6 +38,10 @@ print_error() {
 
 print_blue() {
     echo -e "${BLUE}[INFO]${NC} $1"
+}
+
+print_cyan() {
+    echo -e "${CYAN}[INFO]${NC} $1"
 }
 
 # Function to detect distribution
@@ -165,6 +180,75 @@ install_config() {
     fi
 }
 
+# Function to apply theme
+apply_theme() {
+    local theme=$1
+    local distro=$2
+    
+    setup_paths "$distro"
+    
+    # Check if theme exists
+    if [[ ! ${THEMES[$theme]} ]]; then
+        print_error "Theme '$theme' not found!"
+        echo "Available themes:"
+        for theme_name in "${!THEMES[@]}"; do
+            echo "  $theme_name - ${THEMES[$theme_name]}"
+        done
+        return 1
+    fi
+    
+    local theme_url="${THEMES_BASE_URL}${theme}.conf"
+    
+    print_status "Applying theme: $theme (${THEMES[$theme]})"
+    print_status "Downloading theme from $theme_url"
+    
+    # Download theme
+    download_file "$theme_url" "/tmp/ping-status-theme.conf"
+    
+    if [ $? -eq 0 ] && [ -s "/tmp/ping-status-theme.conf" ]; then
+        # Apply theme to user config
+        mkdir -p "$USER_CONFIG_DIR"
+        cp "/tmp/ping-status-theme.conf" "$USER_CONFIG_DIR/ping-status.conf"
+        print_status "✅ Theme '$theme' applied successfully!"
+        rm -f "/tmp/ping-status-theme.conf"
+    else
+        print_error "Failed to download or apply theme '$theme'"
+        return 1
+    fi
+}
+
+# Function to apply theme from URL
+apply_theme_from_url() {
+    local theme_url=$1
+    local distro=$2
+    
+    setup_paths "$distro"
+    
+    print_status "Applying theme from URL: $theme_url"
+    
+    # Download theme
+    download_file "$theme_url" "/tmp/ping-status-theme-url.conf"
+    
+    if [ $? -eq 0 ] && [ -s "/tmp/ping-status-theme-url.conf" ]; then
+        # Apply theme to user config
+        mkdir -p "$USER_CONFIG_DIR"
+        cp "/tmp/ping-status-theme-url.conf" "$USER_CONFIG_DIR/ping-status.conf"
+        print_status "✅ Theme from URL applied successfully!"
+        rm -f "/tmp/ping-status-theme-url.conf"
+    else
+        print_error "Failed to download or apply theme from URL"
+        return 1
+    fi
+}
+
+# Function to list themes
+list_themes() {
+    print_cyan "🎨 Available themes:"
+    for theme in "${!THEMES[@]}"; do
+        print_blue "  $theme - ${THEMES[$theme]}"
+    done
+}
+
 # Function to test installation
 test_installation() {
     print_status "Testing installation..."
@@ -242,24 +326,31 @@ show_usage() {
     echo "  -u, --update        Update existing installation"
     echo "  -r, --uninstall     Uninstall ping-status"
     echo "  -v, --version       Show version information"
+    echo "  --list-themes       List available themes"
+    echo "  --theme THEME       Apply theme during installation"
+    echo "  --theme-url URL     Apply theme from URL during installation"
+    echo ""
+    echo "Available themes: minimal, detailed, modern, classic, terminal"
 }
 
 # Function to show version
 show_version() {
-    echo "Ping Status Installer v2.1.0"
+    echo "Ping Status Installer v2.2.0"
     echo "Author: hairpin01"
     echo "GitHub: https://github.com/hairpin01/ping-status"
 }
 
 # Main installation function
 main() {
-    print_blue "🚀 Ping Status Monitor Installer"
+    print_cyan "🚀 Ping Status Monitor Installer"
     
     # Parse arguments
     SKIP_DEPS=false
     SKIP_TEST=false
     UPDATE=false
     UNINSTALL=false
+    THEME=""
+    THEME_URL=""
     
     while [[ $# -gt 0 ]]; do
         case $1 in
@@ -286,6 +377,18 @@ main() {
             -v|--version)
                 show_version
                 exit 0
+                ;;
+            --list-themes)
+                list_themes
+                exit 0
+                ;;
+            --theme)
+                THEME="$2"
+                shift 2
+                ;;
+            --theme-url)
+                THEME_URL="$2"
+                shift 2
                 ;;
             *)
                 print_error "Unknown option: $1"
@@ -320,6 +423,16 @@ main() {
     install_script "$DISTRO"
     install_config "$DISTRO"
     
+    # Apply theme if specified
+    if [ ! -z "$THEME" ]; then
+        apply_theme "$THEME" "$DISTRO"
+    fi
+    
+    # Apply theme from URL if specified
+    if [ ! -z "$THEME_URL" ]; then
+        apply_theme_from_url "$THEME_URL" "$DISTRO"
+    fi
+    
     # Test installation if not skipped
     if [ "$SKIP_TEST" = false ]; then
         test_installation
@@ -337,6 +450,9 @@ main() {
     echo "  ping-status --update        # Update to latest version"
     echo "  ping-status --uninstall     # Remove ping-status"
     echo "  ping-status --version       # Show version"
+    echo "  ping-status --list-themes   # List available themes"
+    echo "  ping-status --theme NAME    # Apply theme"
+    echo "  ping-status --theme-url URL # Apply theme from URL"
     echo ""
     print_status "Configuration files:"
     echo "  - System-wide: $CONFIG_DIR/ping-status.conf"
@@ -351,4 +467,3 @@ fi
 
 # Run main function with all arguments
 main "$@"
-
