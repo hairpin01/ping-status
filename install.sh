@@ -8,8 +8,9 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # URLs
-SCRIPT_URL="https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/main/ping-status"
-CONFIG_URL="https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/main/ping_status.conf"
+RAW_INSTALL="https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/main/install.sh"
+RAW_SCRIPT="https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/main/ping-status"
+RAW_CONFIG="https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/main/ping_status.conf"
 
 # Function to print colored output
 print_status() {
@@ -22,6 +23,10 @@ print_warning() {
 
 print_error() {
     echo -e "${RED}[ERROR]${NC} $1"
+}
+
+print_blue() {
+    echo -e "${BLUE}[INFO]${NC} $1"
 }
 
 # Function to detect distribution
@@ -78,9 +83,9 @@ download_file() {
     local output=$2
     
     if command -v wget &> /dev/null; then
-        wget -O "$output" "$url"
+        wget -q -O "$output" "$url"
     elif command -v curl &> /dev/null; then
-        curl -L -o "$output" "$url"
+        curl -s -L -o "$output" "$url"
     else
         print_error "Neither wget nor curl found. Please install one of them."
         exit 1
@@ -110,14 +115,19 @@ install_script() {
     
     setup_paths "$distro"
     
-    print_status "Downloading script from $SCRIPT_URL..."
-    download_file "$SCRIPT_URL" "ping-status"
+    print_status "Downloading script from $RAW_SCRIPT..."
+    download_file "$RAW_SCRIPT" "ping-status"
+    
+    if [ ! -f "ping-status" ]; then
+        print_error "Failed to download script"
+        exit 1
+    fi
     
     print_status "Making script executable..."
     chmod +x ping-status
     
     print_status "Installing script to $BIN_DIR..."
-    $SUDO_CMD mv ping-status "$BIN_DIR/"
+    $SUDO_CMD mv -f ping-status "$BIN_DIR/"
     
     print_status "Creating symlink 'p'..."
     $SUDO_CMD ln -sf "$BIN_DIR/ping-status" "$BIN_DIR/p"
@@ -129,12 +139,17 @@ install_config() {
     
     setup_paths "$distro"
     
-    print_status "Downloading config from $CONFIG_URL..."
-    download_file "$CONFIG_URL" "ping-status.conf"
+    print_status "Downloading config from $RAW_CONFIG..."
+    download_file "$RAW_CONFIG" "ping-status.conf"
+    
+    if [ ! -f "ping-status.conf" ]; then
+        print_error "Failed to download config"
+        exit 1
+    fi
     
     print_status "Installing system-wide config to $CONFIG_DIR..."
     $SUDO_CMD mkdir -p "$CONFIG_DIR"
-    $SUDO_CMD mv ping-status.conf "$CONFIG_DIR/"
+    $SUDO_CMD mv -f ping-status.conf "$CONFIG_DIR/"
     
     print_status "Creating user config directory..."
     mkdir -p "$USER_CONFIG_DIR"
@@ -146,8 +161,7 @@ install_config() {
         print_warning "User config already exists at $USER_CONFIG_DIR/ping-status.conf"
         print_status "Backing up existing config..."
         cp "$USER_CONFIG_DIR/ping-status.conf" "$USER_CONFIG_DIR/ping-status.conf.backup.$(date +%Y%m%d_%H%M%S)"
-        cp "$CONFIG_DIR/ping-status.conf" "$USER_CONFIG_DIR/ping-status.conf.new"
-        print_status "New config template saved as $USER_CONFIG_DIR/ping-status.conf.new"
+        print_status "You can manually update your config with new options from $CONFIG_DIR/ping-status.conf"
     fi
 }
 
@@ -167,6 +181,57 @@ test_installation() {
     fi
 }
 
+# Function to uninstall
+uninstall_script() {
+    local distro=$1
+    
+    setup_paths "$distro"
+    
+    print_warning "This will remove ping-status and all its files."
+    read -p "Are you sure? (y/N): " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        print_status "Uninstallation cancelled."
+        exit 0
+    fi
+    
+    print_status "Removing files..."
+    
+    # Remove binary files
+    $SUDO_CMD rm -f "$BIN_DIR/ping-status"
+    $SUDO_CMD rm -f "$BIN_DIR/p"
+    
+    # Remove config files (ask for user config)
+    print_status "System config removed: $CONFIG_DIR/ping-status.conf"
+    
+    read -p "Remove user config at $USER_CONFIG_DIR/ping-status.conf? (y/N): " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        rm -f "$USER_CONFIG_DIR/ping-status.conf"
+        print_status "User config removed."
+    fi
+    
+    print_status "Ping-status has been uninstalled."
+}
+
+# Function to update script
+update_script() {
+    print_status "Updating ping-status..."
+    
+    # Use the built-in update function
+    if command -v ping-status &> /dev/null; then
+        if sudo ping-status --update; then
+            print_status "Update completed successfully!"
+        else
+            print_error "Update failed!"
+            exit 1
+        fi
+    else
+        print_error "ping-status not found. Please install it first."
+        exit 1
+    fi
+}
+
 # Function to show usage
 show_usage() {
     echo "Usage: $0 [OPTIONS]"
@@ -174,19 +239,27 @@ show_usage() {
     echo "  -h, --help          Show this help message"
     echo "  -s, --skip-deps     Skip dependency installation"
     echo "  -t, --skip-test     Skip installation test"
-    echo "  -c, --config-only   Install only the config file"
     echo "  -u, --update        Update existing installation"
+    echo "  -r, --uninstall     Uninstall ping-status"
+    echo "  -v, --version       Show version information"
+}
+
+# Function to show version
+show_version() {
+    echo "Ping Status Installer v2.1.0"
+    echo "Author: hairpin01"
+    echo "GitHub: https://github.com/hairpin01/ping-status"
 }
 
 # Main installation function
 main() {
-    print_status "Starting ping-status installation..."
+    print_blue "🚀 Ping Status Monitor Installer"
     
     # Parse arguments
     SKIP_DEPS=false
     SKIP_TEST=false
-    CONFIG_ONLY=false
     UPDATE=false
+    UNINSTALL=false
     
     while [[ $# -gt 0 ]]; do
         case $1 in
@@ -202,13 +275,17 @@ main() {
                 SKIP_TEST=true
                 shift
                 ;;
-            -c|--config-only)
-                CONFIG_ONLY=true
-                shift
-                ;;
             -u|--update)
                 UPDATE=true
                 shift
+                ;;
+            -r|--uninstall)
+                UNINSTALL=true
+                shift
+                ;;
+            -v|--version)
+                show_version
+                exit 0
                 ;;
             *)
                 print_error "Unknown option: $1"
@@ -222,26 +299,29 @@ main() {
     DISTRO=$(detect_distro)
     print_status "Detected distribution: $DISTRO"
     
+    # Handle uninstallation
+    if [ "$UNINSTALL" = true ]; then
+        uninstall_script "$DISTRO"
+        exit 0
+    fi
+    
+    # Handle update
+    if [ "$UPDATE" = true ]; then
+        update_script
+        exit 0
+    fi
+    
     # Install dependencies if not skipped
-    if [ "$SKIP_DEPS" = false ] && [ "$CONFIG_ONLY" = false ]; then
+    if [ "$SKIP_DEPS" = false ]; then
         install_dependencies "$DISTRO"
     fi
     
-    # Install or update
-    if [ "$UPDATE" = true ]; then
-        print_status "Updating ping-status..."
-        install_script "$DISTRO"
-        install_config "$DISTRO"
-    elif [ "$CONFIG_ONLY" = true ]; then
-        print_status "Installing config only..."
-        install_config "$DISTRO"
-    else
-        install_script "$DISTRO"
-        install_config "$DISTRO"
-    fi
+    # Install script and config
+    install_script "$DISTRO"
+    install_config "$DISTRO"
     
     # Test installation if not skipped
-    if [ "$SKIP_TEST" = false ] && [ "$CONFIG_ONLY" = false ]; then
+    if [ "$SKIP_TEST" = false ]; then
         test_installation
     fi
     
@@ -251,11 +331,16 @@ main() {
     echo "  - 'p' command for quick access"
     echo "  - 'ping-status' command for full name"
     echo ""
+    print_status "Available commands:"
+    echo "  p                           # Show system status"
+    echo "  ping-status --check-update  # Check for updates"
+    echo "  ping-status --update        # Update to latest version"
+    echo "  ping-status --uninstall     # Remove ping-status"
+    echo "  ping-status --version       # Show version"
+    echo ""
     print_status "Configuration files:"
     echo "  - System-wide: $CONFIG_DIR/ping-status.conf"
     echo "  - User-specific: $USER_CONFIG_DIR/ping-status.conf"
-    echo ""
-    print_status "To customize, edit: $USER_CONFIG_DIR/ping-status.conf"
 }
 
 # Check if script is run with bash
@@ -266,3 +351,4 @@ fi
 
 # Run main function with all arguments
 main "$@"
+
