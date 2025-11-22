@@ -15,7 +15,7 @@ curl -O installer https://raw.githubusercontent.com/your-username/ping-status/ma
 `./install.sh`
 
 # Installation options
- Skip installing dependencies `--skip-deps`
+ `Skip installing` dependencies `--skip-deps`
  Update the configuration only `--config-only`
  Update an existing installation `--update`
 > [!TIP]
@@ -39,7 +39,7 @@ Hostname: arch-pc
 ```
 > [!TIP]
 > Output Settings
-> Edit the ~/.config/ping-status.conf file
+> Edit the `~/.config/ping-status.conf` file
 
 # 🔄 Update
 ```
@@ -65,3 +65,17 @@ hash -r
 > Checking for updates:
 > `ping-status --check-update`
 > Show the version: `ping-status --version`
+
+### Use with themes
+Installation with a `theme`:
+```
+# Install with a minimalistic theme
+./install.sh --theme minimal
+```
+```
+# Install with a modern theme 
+./install.sh --theme modern
+```
+> [!TIP]
+> Install with the theme from the URL
+> `./install.sh --theme url https://example.com/my-theme.conf`
