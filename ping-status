@@ -22,8 +22,26 @@ __author__ = "hairpin01"
 RAW_INSTALL = "https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/main/install.sh"
 RAW_SCRIPT = "https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/main/ping-status"
 RAW_CONFIG = "https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/main/ping_status.conf"
-THEMES_BASE_URL = "https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/main/theme/"
+THEMES_BASE_URL = "https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/main/themes/"
 PLUGINS_BASE_URL = "https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/main/plugins/"
+
+def version_check(required_version, component_name="component"):
+    """Проверка совместимости версий"""
+    current_parts = list(map(int, __version__.split('.')))
+    required_parts = list(map(int, required_version.split('.')))
+    
+    # Сравниваем версии
+    for i in range(max(len(current_parts), len(required_parts))):
+        current = current_parts[i] if i < len(current_parts) else 0
+        required = required_parts[i] if i < len(required_parts) else 0
+        
+        if current < required:
+            print_colored(f"❌ {component_name} requires ping-status v{required_version}+ (you have v{__version__})", 'red')
+            return False
+        elif current > required:
+            break
+    
+    return True
 
 def get_color_code(color):
     """Получить код цвета для ANSI escape sequences"""
@@ -257,6 +275,11 @@ def load_plugins():
             plugin_module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(plugin_module)
             
+            # Проверка версии плагина
+            if hasattr(plugin_module, '__min_version__'):
+                if not version_check(plugin_module.__min_version__, f"Plugin '{plugin_name}'"):
+                    continue
+            
             # Вызов функции register плагина
             if hasattr(plugin_module, 'register'):
                 plugin_data = plugin_module.register()
@@ -264,9 +287,9 @@ def load_plugins():
                     plugins_data.update(plugin_data)
                     loaded_plugins.append(plugin_name)
                 else:
-                    print_colored(f"❌ Плагин {plugin_name} вернул неверный формат", 'red')
+                    print_colored(f"❌ Плагин {plugin_name} вернул неверный формат", 'yellow')
             else:
-                print_colored(f"❌ Плагин {plugin_name} не имеет функции register", 'red')
+                print_colored(f"❌ Плагин {plugin_name} не имеет функции register", 'yellow')
                 
         except Exception as e:
             print_colored(f"❌ Ошибка загрузки плагина {plugin_name}: {e}", 'red')
@@ -662,6 +685,17 @@ def apply_theme_from_url(theme_url, theme_name="custom"):
         # Скачать тему
         with urllib.request.urlopen(theme_url) as response:
             theme_content = response.read().decode('utf-8')
+        
+        # Проверить версию темы
+        config = configparser.ConfigParser()
+        try:
+            config.read_string(theme_content)
+            if config.has_section('compatibility'):
+                min_version = config.get('compatibility', 'min_version', fallback='')
+                if min_version and not version_check(min_version, f"Theme '{theme_name}'"):
+                    return False
+        except:
+            pass  # Если не удалось проверить версию, продолжаем
         
         # Сохранить в пользовательский конфиг
         user_config_path = Path.home() / '.config' / 'ping-status.conf'
