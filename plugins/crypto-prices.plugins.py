@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 
 __min_version__ = "3.3.0"
-
+__version__ = "1.0.1"
+__plugin_url__ = "https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/main/plugins/crypto-prices.plugins.py"
+__name__ = "crypto-prices"
 def get_help():
     return """
 Crypto Prices Plugin
