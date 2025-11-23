@@ -11,20 +11,22 @@ import hashlib
 import json
 import shutil
 import importlib.util
+import re
 from pathlib import Path
 from datetime import datetime
 
-__version__ = "3.2.1"
+__version__ = "3.3.0"
 __author__ = "hairpin01"
 
 # URLs для обновления
 RAW_INSTALL = "https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/main/install.sh"
 RAW_SCRIPT = "https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/main/ping-status"
 RAW_CONFIG = "https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/main/ping_status.conf"
-THEMES_BASE_URL = "https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/main/theme/"
+THEMES_BASE_URL = "https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/main/themes/"
 PLUGINS_BASE_URL = "https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/main/plugins/"
 
 def get_color_code(color):
+    """Получить код цвета для ANSI escape sequences"""
     colors = {
         'black': '30',
         'red': '31',
@@ -36,13 +38,126 @@ def get_color_code(color):
         'white': '37',
         'reset': '0'
     }
+    
+    # Поддержка HEX цветов (базовая реализация)
+    if color.startswith('#'):
+        # Простая конвертация HEX в ближайший ANSI цвет
+        hex_color = color.lstrip('#').lower()
+        if hex_color in ['ff0000', 'ff5555', 'ff6b6b']:
+            return '31'  # red
+        elif hex_color in ['00ff00', '55ff55', '6bff6b']:
+            return '32'  # green
+        elif hex_color in ['ffff00', 'ffff55', 'ffff6b']:
+            return '33'  # yellow
+        elif hex_color in ['0000ff', '5555ff', '6b6bff']:
+            return '34'  # blue
+        elif hex_color in ['ff00ff', 'ff55ff', 'ff6bff']:
+            return '35'  # magenta
+        elif hex_color in ['00ffff', '55ffff', '6bffff']:
+            return '36'  # cyan
+        else:
+            return '37'  # white
+    
     return colors.get(color.lower(), '37')
 
 def colorize(text, color):
+    """Цветовой вывод текста"""
     return f'\033[{get_color_code(color)}m{text}\033[0m'
 
 def print_colored(text, color='white'):
     print(colorize(text, color))
+
+def parse_color_commands(text, data_dict):
+    """Парсинг цветовых команд в тексте"""
+    # Паттерн для поиска {color:(текст) "цвет"}
+    pattern = r'\{color:\(([^)]+)\)\s*"([^"]+)"\}'
+    
+    def replace_color(match):
+        content = match.group(1).strip()
+        color = match.group(2).strip()
+        
+        # Если content является ключом в data_dict, используем его значение
+        if content in data_dict:
+            content_value = str(data_dict[content])
+        else:
+            content_value = content
+        
+        return colorize(content_value, color)
+    
+    return re.sub(pattern, replace_color, text)
+
+def apply_global_colors(text, global_color):
+    """Применить глобальный цвет ко всему тексту"""
+    if not global_color:
+        return text
+    
+    # Разбиваем текст на строки для применения градиента
+    lines = text.split('\n')
+    colored_lines = []
+    
+    for i, line in enumerate(lines):
+        if global_color == "rainbow":
+            # Радужный эффект
+            colored_line = ""
+            colors = ['red', 'yellow', 'green', 'cyan', 'blue', 'magenta']
+            for j, char in enumerate(line):
+                color = colors[(i + j) % len(colors)]
+                colored_line += colorize(char, color)
+            colored_lines.append(colored_line)
+        elif global_color == "gradient-vertical":
+            # Вертикальный градиент (сверху красный, снизу зеленый)
+            total_lines = len(lines)
+            if total_lines > 1:
+                # Интерполируем от красного к зеленому
+                ratio = i / (total_lines - 1) if total_lines > 1 else 0
+                if ratio < 0.5:
+                    # От красного к желтому
+                    color_ratio = ratio * 2
+                    if color_ratio < 0.33:
+                        color = 'red'
+                    elif color_ratio < 0.66:
+                        color = 'yellow'
+                    else:
+                        color = 'green'
+                else:
+                    # От желтого к зеленому
+                    color_ratio = (ratio - 0.5) * 2
+                    if color_ratio < 0.5:
+                        color = 'yellow'
+                    else:
+                        color = 'green'
+                colored_lines.append(colorize(line, color))
+            else:
+                colored_lines.append(colorize(line, 'yellow'))
+        elif global_color == "gradient-horizontal":
+            # Горизонтальный градиент (слева зеленый, справа красный)
+            colored_line = ""
+            line_length = len(line)
+            for j, char in enumerate(line):
+                ratio = j / line_length if line_length > 0 else 0
+                if ratio < 0.5:
+                    # От зеленого к желтому
+                    color_ratio = ratio * 2
+                    if color_ratio < 0.33:
+                        color = 'green'
+                    elif color_ratio < 0.66:
+                        color = 'yellow'
+                    else:
+                        color = 'red'
+                else:
+                    # От желтого к красному
+                    color_ratio = (ratio - 0.5) * 2
+                    if color_ratio < 0.5:
+                        color = 'yellow'
+                    else:
+                        color = 'red'
+                colored_line += colorize(char, color)
+            colored_lines.append(colored_line)
+        else:
+            # Однотонный цвет
+            colored_lines.append(colorize(line, global_color))
+    
+    return '\n'.join(colored_lines)
 
 def get_ping(host):
     try:
@@ -90,10 +205,15 @@ def load_config():
     host = config.get('settings', 'host', fallback='google.com')
     template = config.get('settings', 'text', fallback='Ping: {ping}\nUptime: {uptime}\nUser: {user}\nHostname: {hostname}')
     
+    # Основные цвета
     ping_color = config.get('colors', 'ping', fallback='green')
     uptime_color = config.get('colors', 'uptime', fallback='yellow')
     user_color = config.get('colors', 'user', fallback='blue')
     hostname_color = config.get('colors', 'hostname', fallback='cyan')
+    
+    # Расширенные цвета
+    global_color = config.get('colors-plus', 'global', fallback='')
+    background_color = config.get('colors-plus', 'background', fallback='')
     
     # Загружаем настройки плагинов
     plugins_enabled = config.get('plugins', 'enabled', fallback='system-info,weather').split(',')
@@ -106,6 +226,10 @@ def load_config():
             'uptime': uptime_color,
             'user': user_color,
             'hostname': hostname_color
+        },
+        'colors_plus': {
+            'global': global_color,
+            'background': background_color
         },
         'plugins_enabled': [p.strip() for p in plugins_enabled]
     }
@@ -163,20 +287,35 @@ def show_status():
     
     # Подготовка данных для подстановки
     all_data = {
-        'ping': colorize(ping_value, config['colors']['ping']),
-        'uptime': colorize(uptime_value, config['colors']['uptime']),
-        'user': colorize(user_value, config['colors']['user']),
-        'hostname': colorize(hostname_value, config['colors']['hostname'])
+        'ping': ping_value,
+        'uptime': uptime_value,
+        'user': user_value,
+        'hostname': hostname_value
     }
     
     # Добавление данных из плагинов
     for key, value in plugins_data.items():
         all_data[key] = value
     
+    # Получаем шаблон
+    template = config['template']
+    
+    # Обрабатываем цветовые команды
+    template = parse_color_commands(template, all_data)
+    
     # Подстановка всех значений в шаблон
-    output = config['template']
+    output = template
     for key, value in all_data.items():
+        # Применяем цвета из конфига для стандартных полей
+        if key in config['colors']:
+            color = config['colors'][key]
+            value = colorize(value, color)
         output = output.replace(f'{{{key}}}', str(value))
+    
+    # Применяем глобальные цвета
+    global_color = config['colors_plus']['global']
+    if global_color:
+        output = apply_global_colors(output, global_color)
     
     print(output)
 
