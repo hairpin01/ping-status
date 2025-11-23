@@ -7,10 +7,11 @@ def get_help():
 Memory Bar Plugin
 =================
 
-Shows memory usage as a progress bar.
+Shows memory usage as a progress bar with percentage.
 
 Available Placeholders:
 {memory_bar} - Memory usage bar (20 characters)
+{memory_percent} - Memory usage percentage
 """
 
 def create_bar(percentage, width=20):
@@ -21,5 +22,6 @@ def create_bar(percentage, width=20):
 def register():
     memory = psutil.virtual_memory()
     return {
-        'memory_bar': create_bar(memory.percent)
+        'memory_bar': create_bar(memory.percent),
+        'memory_percent': f"{memory.percent:.1f}"
     }
