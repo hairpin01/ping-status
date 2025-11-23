@@ -78,4 +78,4 @@ Installation with a `theme`:
 ```
 > [!TIP]
 > Install with the theme from the URL
-> `./install.sh --theme url https://example.com/my-theme.conf`
+> `./install.sh --theme-url https://example.com/my-theme.conf`
