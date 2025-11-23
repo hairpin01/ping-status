@@ -4,7 +4,7 @@ import subprocess
 import configparser
 from pathlib import Path
 import statistics
-
+__min_version__ = "3.3.0"
 def get_help():
     return """
 Multi-Ping Plugin
