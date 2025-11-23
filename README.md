@@ -85,7 +85,7 @@ Installation with a `theme`:
 
 
 ### Plugins
-> [!INFO]
+> [!NOTE]
 > Where are the plugins stored? `~/.config/ping-status/plugins/`
 ## Installing plugins
 ```
