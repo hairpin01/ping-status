@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 import os
-import shutil
 import sys
 import subprocess
 import configparser
@@ -10,9 +9,12 @@ import urllib.request
 import tempfile
 import hashlib
 import json
+import shutil
+import importlib.util
 from pathlib import Path
+from datetime import datetime
 
-__version__ = "2.2.1"
+__version__ = "3.0.0"
 __author__ = "hairpin01"
 
 # URLs для обновления
@@ -20,15 +22,7 @@ RAW_INSTALL = "https://raw.githubusercontent.com/hairpin01/ping-status/refs/head
 RAW_SCRIPT = "https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/main/ping-status"
 RAW_CONFIG = "https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/main/ping_status.conf"
 THEMES_BASE_URL = "https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/main/theme/"
-
-# Доступные темы
-AVAILABLE_THEMES = {
-    "minimal": "Минималистичная тема в одну строку",
-    "detailed": "Подробная тема с рамкой", 
-    "modern": "Современная тема с иконками",
-    "classic": "Классическая тема",
-    "terminal": "Тема в стиле терминала"
-}
+PLUGINS_BASE_URL = "https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/main/plugins/"
 
 def get_color_code(color):
     colors = {
@@ -112,18 +106,64 @@ def load_config():
         }
     }
 
+def load_plugins():
+    """Загрузить все плагины из директории плагинов"""
+    plugins_dir = Path.home() / '.config' / 'ping-status' / 'plugins'
+    plugins_dir.mkdir(parents=True, exist_ok=True)
+    
+    plugins_data = {}
+    
+    for plugin_file in plugins_dir.glob('*.py'):
+        try:
+            # Динамическая загрузка плагина
+            spec = importlib.util.spec_from_file_location(plugin_file.stem, plugin_file)
+            plugin_module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(plugin_module)
+            
+            # Вызов функции register плагина
+            if hasattr(plugin_module, 'register'):
+                plugin_data = plugin_module.register()
+                if isinstance(plugin_data, dict):
+                    plugins_data.update(plugin_data)
+                    print_colored(f"✅ Загружен плагин: {plugin_file.stem}", 'green')
+                else:
+                    print_colored(f"❌ Плагин {plugin_file.stem} вернул неверный формат", 'yellow')
+            else:
+                print_colored(f"❌ Плагин {plugin_file.stem} не имеет функции register", 'yellow')
+                
+        except Exception as e:
+            print_colored(f"❌ Ошибка загрузки плагина {plugin_file.stem}: {e}", 'red')
+    
+    return plugins_data
+
 def show_status():
     config = load_config()
     
+    # Основные метрики
     ping_value = get_ping(config['host'])
     uptime_value = get_uptime()
     user_value = os.getlogin()
     hostname_value = subprocess.run(['hostname'], capture_output=True, text=True).stdout.strip()
     
-    output = config['template'].replace('{ping}', colorize(ping_value, config['colors']['ping']))
-    output = output.replace('{uptime}', colorize(uptime_value, config['colors']['uptime']))
-    output = output.replace('{user}', colorize(user_value, config['colors']['user']))
-    output = output.replace('{hostname}', colorize(hostname_value, config['colors']['hostname']))
+    # Загрузка плагинов
+    plugins_data = load_plugins()
+    
+    # Подготовка данных для подстановки
+    all_data = {
+        'ping': colorize(ping_value, config['colors']['ping']),
+        'uptime': colorize(uptime_value, config['colors']['uptime']),
+        'user': colorize(user_value, config['colors']['user']),
+        'hostname': colorize(hostname_value, config['colors']['hostname'])
+    }
+    
+    # Добавление данных из плагинов
+    for key, value in plugins_data.items():
+        all_data[key] = value
+    
+    # Подстановка всех значений в шаблон
+    output = config['template']
+    for key, value in all_data.items():
+        output = output.replace(f'{{{key}}}', str(value))
     
     print(output)
 
@@ -206,8 +246,6 @@ def perform_update():
         config_path = Path('/etc/ping-status.conf')
         
         # Использовать copy2 вместо rename для кросс-файловой системы
-        import shutil
-        
         if script_path.exists():
             shutil.copy2(str(script_path), str(backup_dir / 'ping-status.backup'))
         if config_path.exists():
@@ -271,6 +309,7 @@ def uninstall():
     ]
     
     user_config = Path.home() / '.config' / 'ping-status.conf'
+    plugins_dir = Path.home() / '.config' / 'ping-status' / 'plugins'
     
     print_colored("Следующие файлы будут удалены:", 'red')
     for file in files_to_remove:
@@ -279,6 +318,9 @@ def uninstall():
     
     if user_config.exists():
         print_colored(f"  - {user_config} (пользовательский конфиг)", 'red')
+    
+    if plugins_dir.exists():
+        print_colored(f"  - {plugins_dir} (директория плагинов)", 'red')
     
     # Подтверждение
     try:
@@ -314,6 +356,16 @@ def uninstall():
         except Exception as e:
             print_colored(f"❌ Ошибка удаления {user_config}: {e}", 'red')
     
+    # Предложение удалить плагины
+    if plugins_dir.exists():
+        try:
+            remove_plugins = input(f"\nУдалить директорию плагинов {plugins_dir}? (y/N): ").strip().lower()
+            if remove_plugins == 'y':
+                shutil.rmtree(plugins_dir)
+                print_colored(f"✅ Удален: {plugins_dir}", 'green')
+        except Exception as e:
+            print_colored(f"❌ Ошибка удаления {plugins_dir}: {e}", 'red')
+    
     print_colored(f"\n✅ Удалено файлов: {len(removed_files)}", 'green')
     print_colored("🎯 Программа удалена. Для повторной установки запустите установщик.", 'blue')
     return True
@@ -324,24 +376,56 @@ def show_version():
     print_colored(f"Автор: {__author__}", 'blue')
     print_colored("GitHub: https://github.com/hairpin01/ping-status", 'blue')
 
+def get_available_themes():
+    """Получить список доступных тем из GitHub"""
+    try:
+        # Используем GitHub API для получения списка файлов в директории themes
+        api_url = "https://api.github.com/repos/hairpin01/ping-status/contents/themes"
+        with urllib.request.urlopen(api_url) as response:
+            contents = json.loads(response.read().decode('utf-8'))
+        
+        themes = {}
+        for item in contents:
+            if item['name'].endswith('.conf'):
+                theme_name = item['name'].replace('.conf', '')
+                themes[theme_name] = item['download_url']
+        
+        return themes
+    except Exception as e:
+        print_colored(f"❌ Не удалось получить список тем: {e}", 'red')
+        # Возвращаем базовые темы как запасной вариант
+        return {
+            "minimal": f"{THEMES_BASE_URL}minimal.conf",
+            "detailed": f"{THEMES_BASE_URL}detailed.conf",
+            "modern": f"{THEMES_BASE_URL}modern.conf",
+            "classic": f"{THEMES_BASE_URL}classic.conf",
+            "terminal": f"{THEMES_BASE_URL}terminal.conf"
+        }
+
 def list_themes():
     """Показать список доступных тем"""
-    print_colored("🎨 Доступные темы:", 'cyan')
-    for theme, description in AVAILABLE_THEMES.items():
-        print_colored(f"  {theme:12} - {description}", 'blue')
+    print_colored("🎨 Получение списка тем...", 'yellow')
+    themes = get_available_themes()
+    
+    print_colored("📁 Доступные темы:", 'cyan')
+    for theme_name in sorted(themes.keys()):
+        print_colored(f"  {theme_name}", 'blue')
+    
     print()
     print_colored("Использование: ping-status --theme <название_темы>", 'green')
     print_colored("Или: ping-status --theme-url <URL_темы>", 'green')
 
 def apply_theme(theme_name):
     """Применить тему по имени"""
-    if theme_name not in AVAILABLE_THEMES:
+    themes = get_available_themes()
+    
+    if theme_name not in themes:
         print_colored(f"❌ Тема '{theme_name}' не найдена", 'red')
         print_colored("Доступные темы:", 'yellow')
         list_themes()
         return False
     
-    theme_url = f"{THEMES_BASE_URL}{theme_name}.conf"
+    theme_url = themes[theme_name]
     return apply_theme_from_url(theme_url, theme_name)
 
 def apply_theme_from_url(theme_url, theme_name="custom"):
@@ -360,7 +444,7 @@ def apply_theme_from_url(theme_url, theme_name="custom"):
         # Сделать бэкап текущего конфига
         if user_config_path.exists():
             backup_path = user_config_path.with_suffix('.conf.backup')
-            user_config_path.rename(backup_path)
+            shutil.copy2(str(user_config_path), str(backup_path))
             print_colored(f"💾 Создан бэкап: {backup_path}", 'blue')
         
         # Сохранить новую тему
@@ -374,6 +458,86 @@ def apply_theme_from_url(theme_url, theme_name="custom"):
         print_colored(f"❌ Ошибка применения темы: {e}", 'red')
         return False
 
+def get_available_plugins():
+    """Получить список доступных плагинов из GitHub"""
+    try:
+        # Используем GitHub API для получения списка файлов в директории plugins
+        api_url = "https://api.github.com/repos/hairpin01/ping-status/contents/plugins"
+        with urllib.request.urlopen(api_url) as response:
+            contents = json.loads(response.read().decode('utf-8'))
+        
+        plugins = {}
+        for item in contents:
+            if item['name'].endswith('.py'):
+                plugin_name = item['name'].replace('.py', '')
+                plugins[plugin_name] = item['download_url']
+        
+        return plugins
+    except Exception as e:
+        print_colored(f"❌ Не удалось получить список плагинов: {e}", 'red')
+        return {}
+
+def list_plugins():
+    """Показать список доступных плагинов"""
+    print_colored("🔌 Получение списка плагинов...", 'yellow')
+    plugins = get_available_plugins()
+    
+    if not plugins:
+        print_colored("❌ Не удалось загрузить список плагинов", 'red')
+        return
+    
+    print_colored("📁 Доступные плагины:", 'cyan')
+    for plugin_name in sorted(plugins.keys()):
+        print_colored(f"  {plugin_name}", 'blue')
+    
+    print()
+    print_colored("Использование: ping-status --install-plugin <название_плагина>", 'green')
+
+def install_plugin(plugin_name):
+    """Установить плагин по имени"""
+    plugins = get_available_plugins()
+    
+    if plugin_name not in plugins:
+        print_colored(f"❌ Плагин '{plugin_name}' не найден", 'red')
+        print_colored("Доступные плагины:", 'yellow')
+        list_plugins()
+        return False
+    
+    plugin_url = plugins[plugin_name]
+    return install_plugin_from_url(plugin_url, plugin_name)
+
+def install_plugin_from_url(plugin_url, plugin_name="custom"):
+    """Установить плагин из URL"""
+    print_colored(f"🔌 Установка плагина '{plugin_name}'...", 'yellow')
+    
+    try:
+        # Скачать плагин
+        with urllib.request.urlopen(plugin_url) as response:
+            plugin_content = response.read().decode('utf-8')
+        
+        # Сохранить в директорию плагинов
+        plugins_dir = Path.home() / '.config' / 'ping-status' / 'plugins'
+        plugins_dir.mkdir(parents=True, exist_ok=True)
+        
+        plugin_path = plugins_dir / f"{plugin_name}.py"
+        
+        # Сделать бэкап существующего плагина
+        if plugin_path.exists():
+            backup_path = plugin_path.with_suffix('.py.backup')
+            shutil.copy2(str(plugin_path), str(backup_path))
+            print_colored(f"💾 Создан бэкап: {backup_path}", 'blue')
+        
+        # Сохранить новый плагин
+        with open(plugin_path, 'w') as f:
+            f.write(plugin_content)
+        
+        print_colored(f"✅ Плагин '{plugin_name}' успешно установлен!", 'green')
+        return True
+        
+    except Exception as e:
+        print_colored(f"❌ Ошибка установки плагина: {e}", 'red')
+        return False
+
 def main():
     parser = argparse.ArgumentParser(description='Ping Status Monitor')
     parser.add_argument('--version', '-v', action='store_true', help='Показать версию')
@@ -383,6 +547,9 @@ def main():
     parser.add_argument('--list-themes', action='store_true', help='Показать список тем')
     parser.add_argument('--theme', help='Применить тему по имени')
     parser.add_argument('--theme-url', help='Применить тему из URL')
+    parser.add_argument('--list-plugins', action='store_true', help='Показать список плагинов')
+    parser.add_argument('--install-plugin', help='Установить плагин по имени')
+    parser.add_argument('--plugin-url', help='Установить плагин из URL')
     
     args = parser.parse_args()
     
@@ -400,6 +567,12 @@ def main():
         apply_theme(args.theme)
     elif args.theme_url:
         apply_theme_from_url(args.theme_url, "custom")
+    elif args.list_plugins:
+        list_plugins()
+    elif args.install_plugin:
+        install_plugin(args.install_plugin)
+    elif args.plugin_url:
+        install_plugin_from_url(args.plugin_url, "custom")
     else:
         show_status()
 
