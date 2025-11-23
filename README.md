@@ -108,7 +108,7 @@ ping-status --plugin-help system-info # Specific plugin
 
 ## Creating your own plugins
 > [!TIP]
-> Create a file in ~/.config/ping-status/plugins/your-plugin.plugin.py:
+> Create a file in `~/.config/ping-status/plugins/your-plugin.plugin.py`:
 ```python
 #!/usr/bin/env python3
 
