@@ -5,7 +5,9 @@ import json
 import configparser
 from pathlib import Path
 __min_version__ = "3.3.0"
-
+__version__ = "1.1.0"
+__plugins_url__ = "https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/main/plugins/weather.plugin.py"
+__name__ = "weather"
 def get_help():
     return """
 Weather Plugin (Nerd Font Edition)
