@@ -9,7 +9,7 @@ import urllib.request
 import tempfile
 import hashlib
 import json
-inport time
+import time
 import shutil
 import importlib.util
 import re
