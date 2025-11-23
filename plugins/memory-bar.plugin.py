@@ -2,7 +2,9 @@
 
 import psutil
 __min_version__ = "3.3.0"
-
+__plugin_url__ = "https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/main/plugins/memory-bar.plugin.py"
+__version__ = "1.0.1"
+__name__ = "memory-bar"
 def get_help():
     return """
 Memory Bar Plugin
