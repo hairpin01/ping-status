@@ -4,6 +4,33 @@ import subprocess
 import os
 from datetime import datetime
 
+def get_help():
+    return """
+System Info Plugin
+==================
+
+Provides comprehensive system metrics including CPU, memory, disk, temperature, and OS information.
+
+Available Placeholders:
+{system_info}    - Compact summary: CPU usage, memory used, disk used/total
+{cpu_usage}      - CPU usage percentage with icon
+{cpu_temp}       - CPU temperature with icon  
+{cpu_load}       - System load average (1, 5, 15 minutes)
+{memory}         - Memory usage details (used/total MB and percentage)
+{disk}           - Disk usage details (used/total and percentage)
+{swap}           - Swap usage details (if enabled)
+{os}             - Operating system information
+{kernel}         - Kernel version
+
+Configuration:
+No configuration required. Plugin automatically detects system metrics.
+
+Examples in themes:
+- Use {system_info} for compact display
+- Use individual metrics for detailed display
+- Combine with other plugins for comprehensive system monitoring
+"""
+
 def get_cpu_usage():
     """Получить загрузку CPU"""
     try:
