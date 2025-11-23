@@ -141,6 +141,10 @@ min_version = 3.3.0 # (for themes)
 ```
 ```
 __min_version__ = "3.3.0" # (for plugins)
+__plugin_url__ = "URL"
+__name__ = "plugin"
+__version__ = "0.0.0"
+__last_update__ = "2025-11-23 23:13:00"
 ```
 
 > [!WARNING]
