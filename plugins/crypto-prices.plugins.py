@@ -11,9 +11,11 @@ Crypto Prices Plugin
 
 Placeholders:
 {crypto_btc} - Цена Bitcoin (BTC) в USD
-{crypto_eth} - Цена Ethereum (ETH) в USD
+{crypto_eth} - Цена Ethereum (ETH) в USD  
 {crypto_sol} - Цена Solana (SOL) в USD
 {crypto_doge} - Цена Dogecoin (DOGE) в USD
+{crypto_ada} - Цена Cardano (ADA) в USD
+{crypto_dot} - Цена Polkadot (DOT) в USD
 {crypto_prices} - Сводка по всем криптовалютам
 
 Configuration:
@@ -29,8 +31,6 @@ show_change = true
 # Символы для роста/падения
 up_symbol = 🟢
 down_symbol = 🔴
-# Обновлять каждые X минут (кеширование)
-cache_minutes = 5
 
 Пример использования в шаблоне:
 {crypto_btc} - покажет: "₿ $45,231.50 🟢+2.3%"
@@ -42,19 +42,22 @@ def register():
     import json
     import time
     from pathlib import Path
-    import os
     
     def get_crypto_price(coin_id, currency='usd'):
         """Получить цену криптовалюты с кешированием"""
         cache_file = Path.home() / '.cache' / 'ping-status' / 'crypto_prices.json'
-        cache_file.parent.mkdir(exist_ok=True)
+        cache_file.parent.mkdir(parents=True, exist_ok=True)
         
         # Проверяем кеш
         if cache_file.exists():
-            cache_data = json.loads(cache_file.read_text())
-            cache_time = cache_data.get('timestamp', 0)
-            if time.time() - cache_time < 300:  # 5 минут кеш
-                return cache_data.get(coin_id, {}).get(currency)
+            try:
+                with open(cache_file, 'r') as f:
+                    cache_data = json.load(f)
+                cache_time = cache_data.get('timestamp', 0)
+                if time.time() - cache_time < 300:  # 5 минут кеш
+                    return cache_data.get(coin_id, {})
+            except:
+                pass
         
         try:
             url = f"https://api.coingecko.com/api/v3/simple/price?ids={coin_id}&vs_currencies={currency}&include_24hr_change=true"
@@ -64,16 +67,37 @@ def register():
                 
                 # Сохраняем в кеш
                 cache_data = {'timestamp': time.time()}
-                cache_data[coin_id] = data.get(coin_id, {})
-                cache_file.write_text(json.dumps(cache_data))
+                cache_data.update(data)
+                with open(cache_file, 'w') as f:
+                    json.dump(cache_data, f)
                 
                 return data.get(coin_id, {})
                 
         except Exception as e:
             print(f"❌ Crypto API error: {e}")
-            return None
+            return {}
     
-    def format_crypto_display(coin_data, coin_symbol, currency='usd'):
+    def get_plugin_config():
+        """Получить конфигурацию плагина"""
+        from configparser import ConfigParser
+        
+        config_path = Path.home() / '.config' / 'ping-status.conf'
+        if not config_path.exists():
+            config_path = Path('/etc/ping-status.conf')
+        
+        config = ConfigParser()
+        config.read(config_path)
+        
+        crypto_config = {
+            'coins': [c.strip() for c in config.get('crypto', 'coins', fallback='btc,eth,sol,doge').split(',')],
+            'currency': config.get('crypto', 'currency', fallback='usd'),
+            'show_change': config.get('crypto', 'show_change', fallback='true').lower() == 'true',
+            'up_symbol': config.get('crypto', 'up_symbol', fallback='🟢'),
+            'down_symbol': config.get('crypto', 'down_symbol', fallback='🔴')
+        }
+        return crypto_config
+    
+    def format_crypto_display(coin_data, coin_symbol, currency='usd', show_change=True, up_symbol='🟢', down_symbol='🔴'):
         """Форматировать отображение цены"""
         if not coin_data:
             return f"{coin_symbol} N/A"
@@ -90,38 +114,14 @@ def register():
             formatted_price = f"${price:.4f}"
         
         # Определяем символ изменения
-        config = get_config()
-        up_sym = config.get('up_symbol', '🟢')
-        down_sym = config.get('down_symbol', '🔴')
+        change_symbol = up_symbol if change_24h >= 0 else down_symbol
+        change_text = f" {change_symbol}{change_24h:+.1f}%" if show_change else ""
         
-        change_symbol = up_sym if change_24h >= 0 else down_sym
-        change_text = f"{change_symbol}{change_24h:+.1f}%" if config.get('show_change', 'true').lower() == 'true' else ""
-        
-        return f"{coin_symbol} {formatted_price} {change_text}".strip()
-    
-    def get_config():
-        """Получить конфигурацию плагина"""
-        from configparser import ConfigParser
-        import os
-        
-        config_path = Path.home() / '.config' / 'ping-status.conf'
-        if not config_path.exists():
-            config_path = Path('/etc/ping-status.conf')
-        
-        config = ConfigParser()
-        config.read(config_path)
-        
-        return {
-            'coins': config.get('crypto', 'coins', fallback='btc,eth,sol,doge').split(','),
-            'currency': config.get('crypto', 'currency', fallback='usd'),
-            'show_change': config.get('crypto', 'show_change', fallback='true'),
-            'up_symbol': config.get('crypto', 'up_symbol', fallback='🟢'),
-            'down_symbol': config.get('crypto', 'down_symbol', fallback='🔴')
-        }
+        return f"{coin_symbol} {formatted_price}{change_text}"
     
     def create_prices_table():
         """Создать таблицу с ценами всех криптовалют"""
-        config = get_config()
+        config = get_plugin_config()
         coins_data = {}
         
         coin_symbols = {
@@ -130,10 +130,7 @@ def register():
             'sol': '◎',
             'doge': 'Ð',
             'ada': '₳',
-            'dot': '●',
-            'matic': '⬡',
-            'avax': '🅰',
-            'xrp': '✕'
+            'dot': '●'
         }
         
         coin_names = {
@@ -142,14 +139,10 @@ def register():
             'sol': 'solana',
             'doge': 'dogecoin',
             'ada': 'cardano',
-            'dot': 'polkadot',
-            'matic': 'matic-network',
-            'avax': 'avalanche-2',
-            'xrp': 'ripple'
+            'dot': 'polkadot'
         }
         
         for coin in config['coins']:
-            coin = coin.strip()
             if coin in coin_names:
                 data = get_crypto_price(coin_names[coin], config['currency'])
                 if data:
@@ -160,16 +153,30 @@ def register():
         
         lines = []
         for coin in config['coins']:
-            coin = coin.strip()
             if coin in coins_data and coin in coin_symbols:
                 symbol = coin_symbols[coin]
-                display = format_crypto_display(coins_data[coin], symbol, config['currency'])
+                display = format_crypto_display(
+                    coins_data[coin], 
+                    symbol, 
+                    config['currency'],
+                    config['show_change'],
+                    config['up_symbol'],
+                    config['down_symbol']
+                )
                 lines.append(display)
         
-        return " | ".join(lines) if len(lines) <= 3 else "\n".join(lines)
+        # Если строк мало, объединяем в одну строку
+        if len(lines) <= 3:
+            return " | ".join(lines)
+        else:
+            # Иначе разбиваем на несколько строк
+            result = []
+            for i in range(0, len(lines), 2):
+                result.append(" | ".join(lines[i:i+2]))
+            return "\n".join(result)
     
-    # Получаем данные для каждой криптовалюты
-    config = get_config()
+    # Получаем конфигурацию
+    config = get_plugin_config()
     result = {}
     
     # Основные криптовалюты
@@ -182,15 +189,26 @@ def register():
         'dot': ('polkadot', '●')
     }
     
+    # Получаем данные для каждой криптовалюты
     for coin in config['coins']:
-        coin = coin.strip()
         if coin in crypto_map:
             coin_id, symbol = crypto_map[coin]
             data = get_crypto_price(coin_id, config['currency'])
-            if data:
-                result[f'crypto_{coin}'] = format_crypto_display(data, symbol, config['currency'])
+            result[f'crypto_{coin}'] = format_crypto_display(
+                data, 
+                symbol, 
+                config['currency'],
+                config['show_change'],
+                config['up_symbol'],
+                config['down_symbol']
+            )
     
     # Сводная информация
     result['crypto_prices'] = create_prices_table()
+    
+    # Заполняем отсутствующие значения
+    for coin in ['btc', 'eth', 'sol', 'doge', 'ada', 'dot']:
+        if f'crypto_{coin}' not in result:
+            result[f'crypto_{coin}'] = f"{crypto_map.get(coin, ('', '?'))[1]} N/A"
     
     return result
