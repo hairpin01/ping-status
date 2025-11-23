@@ -5,7 +5,7 @@
 # 📦 Installation
 ```bash
 # Download the
-curl -O https://raw.githubusercontent.com/hairpin01/ping-status/main/install.sh
+curl -L "https://raw.githubusercontent.com/hairpin01/ping-status/main/install.sh"
 ```
 > [!NOTE]
 > Or via wget `wget https://raw.githubusercontent.com/hairpin01/ping-status/main/install.sh`
