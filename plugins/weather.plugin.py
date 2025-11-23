@@ -7,14 +7,14 @@ from pathlib import Path
 
 def get_help():
     return """
-Weather Plugin
-==============
+Weather Plugin (Nerd Font Edition)
+===================================
 
-Provides weather information using OpenWeatherMap API or IP-based location fallback.
+Provides weather information using OpenWeatherMap API with Nerd Font icons.
 
 Available Placeholders:
-{weather}        - Full weather information with emojis
-{weather_short}  - Short weather summary (first 20 characters)
+{weather}        - Full weather information with Nerd Font icons
+{weather_short}  - Short weather summary
 
 Configuration:
 Add to ~/.config/ping-status.conf:
@@ -25,18 +25,8 @@ city = Moscow                 # Your city name
 units = metric                # Temperature units: metric, imperial
 lang = en                     # Language code: en, ru, etc.
 
-Fallback Behavior:
-- If no API key provided: uses IP-based location with wttr.in service
-- If API key provided: uses OpenWeatherMap with more accurate data
-
-Weather Emojis:
-☀️ Clear sky    ☁️ Clouds      🌧️ Rain
-⛈️ Thunderstorm ❄️ Snow       🌫️ Fog/Mist
-💨 Windy       🌈 Other
-
-Examples:
-{weather} → ☀️ 22°C (feels 24°C), clear sky, 💧 45%, 💨 3.2m/s
-{weather_short} → 🌤️ ☀️ 22°C, clear sky,...
+Icons Used:
+ - Weather section |  - Temperature |  - Wind |  - Humidity
 """
 
 def get_weather_config():
@@ -83,19 +73,19 @@ def get_weather_by_ip():
         wind_speed = current['windspeedKmph']
         
         # Подбор эмодзи по описанию погоды
-        weather_emoji = get_weather_emoji(desc)
+        weather_icon = get_weather_nerd_icon(desc)
         
-        return f"{weather_emoji} {temp_c}°C, {desc}, 💧 {humidity}%, 💨 {wind_speed}km/h"
+        return f"{weather_icon} {temp_c}°C, {desc},  {humidity}%,  {wind_speed}km/h"
         
     except Exception as e:
-        return f"❌ Weather: Failed to get data ({str(e)})"
+        return f" Weather unavailable"
 
 def get_weather_openweather():
     """Получить погоду через OpenWeatherMap API"""
     config = get_weather_config()
     
     if not config['api_key']:
-        return "❌ Weather: API key not configured"
+        return " Configure API key"
     
     try:
         url = f"http://api.openweathermap.org/data/2.5/weather?q={config['city']}&appid={config['api_key']}&units={config['units']}&lang={config['lang']}"
@@ -109,33 +99,35 @@ def get_weather_openweather():
         description = data['weather'][0]['description']
         wind_speed = data['wind']['speed']
         
-        weather_emoji = get_weather_emoji(description)
+        weather_icon = get_weather_nerd_icon(description)
         
-        return f"{weather_emoji} {temp:.1f}°C (feels {feels_like:.1f}°C), {description}, 💧 {humidity}%, 💨 {wind_speed}m/s"
+        return f"{weather_icon} {temp:.1f}°C (feels {feels_like:.1f}°C), {description},  {humidity}%,  {wind_speed}m/s"
         
     except Exception as e:
-        return f"❌ Weather: API error ({str(e)})"
+        return f" API error"
 
-def get_weather_emoji(description):
-    """Получить эмодзи для погоды по описанию"""
+def get_weather_nerd_icon(description):
+    """Получить Nerd Font иконку для погоды по описанию"""
     description = description.lower()
     
     if 'sun' in description or 'clear' in description:
-        return '☀️'
+        return ''  # nf-fa-sun_o
     elif 'cloud' in description:
-        return '☁️'
+        return ''  # nf-fa-cloud
     elif 'rain' in description or 'drizzle' in description:
-        return '🌧️'
+        return ''  # nf-weather-rain
     elif 'thunder' in description or 'storm' in description:
-        return '⛈️'
+        return ''  # nf-fa-bolt
     elif 'snow' in description:
-        return '❄️'
+        return ''  # nf-fa-snowflake_o
     elif 'fog' in description or 'mist' in description:
-        return '🌫️'
+        return ''  # nf-fa-eye_slash
     elif 'wind' in description:
-        return '💨'
+        return ''  # nf-weather-wind
+    elif 'partly' in description:
+        return ''  # nf-weather-day_cloudy_high
     else:
-        return '🌈'
+        return ''  # nf-fa-circle
 
 def get_weather():
     """Основная функция получения погоды"""
@@ -153,5 +145,5 @@ def register():
     weather_data = get_weather()
     return {
         'weather': weather_data,
-        'weather_short': f"🌤️ {weather_data[:20]}..." if len(weather_data) > 20 else f"🌤️ {weather_data}"
+        'weather_short': f" {weather_data[:25]}..." if len(weather_data) > 25 else f" {weather_data}"
     }
