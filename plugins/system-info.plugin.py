@@ -3,6 +3,7 @@
 import subprocess
 import os
 import re
+__min_version__ = "3.3.0"
 
 def get_help():
     return """
