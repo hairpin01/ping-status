@@ -93,8 +93,8 @@ Installation with a `theme`:
 ping-status --list-plugins
 ```
 ```
-# Install
-the ping-status --install-plugin system-info plugin
+# Install the
+ping-status --install-plugin system-info plugin
 ```
 ```
 # Install the plugin from the URL
