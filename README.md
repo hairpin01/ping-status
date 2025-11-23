@@ -14,6 +14,12 @@ curl -sSL https://raw.githubusercontent.com/hairpin01/ping-status/main/install.s
 
 `./install.sh`
 
+> [!TIP]
+> I recommend installing psutil
+```
+pip install psutil
+```
+
 # Installation options
  `Skip installing` dependencies `--skip-deps`
  Update the configuration only `--config-only`
