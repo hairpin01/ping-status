@@ -133,6 +133,16 @@ def register():
         'custom_field': 'Your custom value'
     }
 ```
+> [!TIP]
+> The plugin/theme must have
+```
+[compatibility]
+min_version = 3.3.0 # (for themes)
+```
+```
+__min_version__ = "3.3.0" # (for plugins)
+```
+
 > [!WARNING]
 > to enable plugins, add to the conf file
 ``` 
