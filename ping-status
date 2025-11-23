@@ -918,7 +918,7 @@ def install_plugin(plugin_name):
     plugin_url = plugins[plugin_name]
     return install_plugin_from_url(plugin_url, plugin_name)
 
-def install_plugin_from_url(plugin_url, plugin_name="custom", update=False):
+def install_plugin_from_url(plugin_url, plugin_name, update=False):
     """Установить плагин из URL"""
     if update:
         print_colored(f"🔄 Обновление плагина '{plugin_name}'...", 'yellow')
