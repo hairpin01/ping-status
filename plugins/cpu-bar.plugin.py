@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import psutil
+__min_version__ = "3.3.0"
 
 def get_help():
     return """
