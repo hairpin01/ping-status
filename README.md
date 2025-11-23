@@ -72,10 +72,100 @@ Installation with a `theme`:
 # Install with a minimalistic theme
 ./install.sh --theme minimal
 ```
-```
+
+
+
 # Install with a modern theme 
+```
 ./install.sh --theme classic
 ```
 > [!TIP]
 > Install with the theme from the URL
 > `./install.sh --theme-url https://example.com/my-theme.conf`
+
+
+### Plugins
+> [!INFO]
+> Where are the plugins stored? `~/.config/ping-status/plugins/`
+## Installing plugins
+```
+# Show available plugins
+ping-status --list-plugins
+```
+```
+# Install
+the ping-status --install-plugin system-info plugin
+```
+```
+# Install the plugin from the URL
+ping-status --plugin-url https://example.com/plugin.py
+```
+```
+# Show help for plugins
+ping-status --plugin-help # All plugins
+ping-status --plugin-help system-info # Specific plugin
+```
+
+## Creating your own plugins
+> [!TIP]
+> Create a file in ~/.config/ping-status/plugins/your-plugin.plugin.py:
+```python
+#!/usr/bin/env python3
+
+def get_help():
+    return """
+My Plugin
+=========
+
+Description of your plugin.
+
+Placeholders:
+{custom_field} - Description of what this field shows.
+
+Configuration:
+Add to config:
+[my_plugin]
+setting = value
+"""
+
+def register():
+    return {
+        'custom_field': 'Your custom value'
+    }
+```
+> [!WARNING]
+> to enable plugins, add to the conf file
+``` 
+[plugins]
+enabled = system-info,weather # or all
+```
+# Example
+```ini
+[settings]
+host = google.com
+text = ╔═══════════════════════════════╗
+       ║         SYSTEM STATUS         ║
+       ╠═══════════════════════════════╣
+       ║ 🚀 Hostname: {hostname}       ║
+       ║ 👨‍💻 User: {user}               ║
+       ║ ⏱️  Uptime: {uptime}          ║
+       ║ 📡 Ping: {ping}               ║
+       ║ {system_info}                 ║
+       ║ {weather}                     ║
+       ╚═══════════════════════════════╝
+
+[colors]
+hostname = cyan
+user = blue
+uptime = yellow
+ping = green
+
+[plugins]
+enabled = system-info,weather
+
+[weather]
+api_key = YOUR_API_KEY_HERE
+city = Moscow
+units = metric
+lang = en
+```
