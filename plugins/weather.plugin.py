@@ -4,6 +4,7 @@ import urllib.request
 import json
 import configparser
 from pathlib import Path
+__min_version__ = "3.3.0"
 
 def get_help():
     return """
