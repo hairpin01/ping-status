@@ -2,33 +2,31 @@
 
 import subprocess
 import os
-from datetime import datetime
+import re
 
 def get_help():
     return """
-System Info Plugin
-==================
+System Info Plugin (Nerd Font Edition)
+=======================================
 
-Provides comprehensive system metrics including CPU, memory, disk, temperature, and OS information.
+Provides comprehensive system metrics with Nerd Font icons.
 
 Available Placeholders:
-{system_info}    - Compact summary: CPU usage, memory used, disk used/total
-{cpu_usage}      - CPU usage percentage with icon
-{cpu_temp}       - CPU temperature with icon  
-{cpu_load}       - System load average (1, 5, 15 minutes)
-{memory}         - Memory usage details (used/total MB and percentage)
-{disk}           - Disk usage details (used/total and percentage)
-{swap}           - Swap usage details (if enabled)
+{system_info}    - Compact summary with icons
+{cpu_usage}      - CPU usage with Nerd Font icon
+{cpu_temp}       - CPU temperature with Nerd Font icon  
+{cpu_load}       - System load average with Nerd Font icon
+{memory}         - Memory usage with Nerd Font icon
+{disk}           - Disk usage with Nerd Font icon
+{swap}           - Swap usage with Nerd Font icon
 {os}             - Operating system information
 {kernel}         - Kernel version
 
 Configuration:
 No configuration required. Plugin automatically detects system metrics.
 
-Examples in themes:
-- Use {system_info} for compact display
-- Use individual metrics for detailed display
-- Combine with other plugins for comprehensive system monitoring
+Icons Used:
+ - CPU |  - Temperature |  - RAM |  - Disk |  - OS
 """
 
 def get_cpu_usage():
@@ -49,11 +47,11 @@ def get_cpu_usage():
 def get_cpu_temperature():
     """Получить температуру CPU"""
     try:
-        # Попробуем разные пути к файлам температуры
         temp_paths = [
             '/sys/class/thermal/thermal_zone0/temp',
             '/sys/class/hwmon/hwmon0/temp1_input',
-            '/sys/class/hwmon/hwmon1/temp1_input'
+            '/sys/class/hwmon/hwmon1/temp1_input',
+            '/sys/class/hwmon/hwmon2/temp1_input'
         ]
         
         for path in temp_paths:
@@ -148,10 +146,23 @@ def get_os_info():
                 if '=' in line:
                     key, value = line.strip().split('=', 1)
                     os_info[key] = value.strip('"')
-            return f"{os_info.get('PRETTY_NAME', 'Unknown')}"
+            
+            name = os_info.get('PRETTY_NAME', os_info.get('NAME', 'Unknown'))
+            # Укорачиваем длинные названия
+            if 'Arch Linux' in name:
+                return "Arch Linux"
+            elif 'Ubuntu' in name:
+                return "Ubuntu"
+            elif 'Debian' in name:
+                return "Debian"
+            elif 'Fedora' in name:
+                return "Fedora"
+            else:
+                return name.split()[0] if ' ' in name else name
+                
         elif os.path.exists('/etc/issue'):
             with open('/etc/issue', 'r') as f:
-                return f.read().strip().replace('\\n', '').replace('\\l', '')
+                return f.read().strip().replace('\\n', '').replace('\\l', '')[:15]
         else:
             return "Unknown"
     except:
@@ -165,20 +176,53 @@ def get_kernel_version():
     except:
         return "unknown"
 
+def get_gpu_info():
+    """Получить информацию о GPU"""
+    try:
+        # Попробуем получить информацию о GPU
+        if shutil.which('nvidia-smi'):
+            result = subprocess.run(['nvidia-smi', '--query-gpu=name', '--format=csv,noheader'], 
+                                  capture_output=True, text=True)
+            if result.returncode == 0:
+                gpu_name = result.stdout.strip().split('\n')[0]
+                return gpu_name.split()[-1]  # Берем последнее слово (обычно модель)
+        
+        # Для интегрированной графики
+        result = subprocess.run(['lspci'], capture_output=True, text=True)
+        for line in result.stdout.split('\n'):
+            if 'VGA' in line or '3D' in line:
+                if 'NVIDIA' in line:
+                    return "NVIDIA"
+                elif 'AMD' in line:
+                    return "AMD"
+                elif 'Intel' in line:
+                    return "Intel"
+        return "Integrated"
+    except:
+        return "unknown"
+
 def register():
     """Функция регистрации плагина"""
     memory = get_memory_usage()
     disk = get_disk_usage()
     swap = get_swap_usage()
     
+    cpu_usage = get_cpu_usage()
+    cpu_temp = get_cpu_temperature()
+    
+    # Форматируем вывод для компактного отображения
+    memory_str = f"{memory['used_mb']}/{memory['total_mb']}MB ({memory['percent']:.1f}%)"
+    disk_str = f"{disk['used']}/{disk['total']} ({disk['percent']})"
+    
     return {
-        'cpu_usage': f"🖥️ CPU: {get_cpu_usage()}",
-        'cpu_temp': f"🌡️ Temp: {get_cpu_temperature()}",
-        'cpu_load': f"📊 Load: {get_load_average()}",
-        'memory': f"🧠 RAM: {memory['used_mb']}/{memory['total_mb']}MB ({memory['percent']:.1f}%)",
-        'disk': f"💾 Disk: {disk['used']}/{disk['total']} ({disk['percent']})",
-        'swap': f"💿 Swap: {swap['used_mb']}/{swap['total_mb']}MB ({swap['percent']:.1f}%)" if swap['total_mb'] > 0 else "💿 Swap: disabled",
-        'os': f"🐧 OS: {get_os_info()}",
-        'kernel': f"🔧 Kernel: {get_kernel_version()}",
-        'system_info': f"🖥️ {get_cpu_usage()} | 🧠 {memory['used_mb']}MB | 💾 {disk['used']}/{disk['total']}"
+        'cpu_usage': f"{cpu_usage}",
+        'cpu_temp': f"{cpu_temp}",
+        'cpu_load': f" {get_load_average()}",
+        'memory': f"{memory_str}",
+        'disk': f"{disk_str}",
+        'swap': f" {swap['used_mb']}/{swap['total_mb']}MB" if swap['total_mb'] > 0 else " disabled",
+        'os': f"{get_os_info()}",
+        'kernel': f" {get_kernel_version()}",
+        'system_info': f" {cpu_usage} |  {memory['used_mb']}MB |  {disk['used']}/{disk['total']}",
+        'gpu': f" {get_gpu_info()}"
     }
