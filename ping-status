@@ -16,7 +16,7 @@ import re
 from pathlib import Path
 from datetime import datetime
 
-__version__ = "3.3.3"
+__version__ = "3.3.4"
 __author__ = "hairpin01"
 
 # URLs для обновления
@@ -914,16 +914,19 @@ def get_available_plugins():
         for item in contents:
             if item['name'].endswith('.py'):
                 plugin_name = item['name'].replace('.py', '')
+                # Убираем .plugin из имени если есть
+                if plugin_name.endswith('.plugin'):
+                    plugin_name = plugin_name[:-7]
                 plugins[plugin_name] = item['download_url']
         
         return plugins
     except Exception as e:
         print_colored(f"❌ Не удалось получить список плагинов: {e}", 'red')
-        return {}
+        return {} 
 
 def list_plugins():
     """Показать список доступных плагинов"""
-    print_colored("🔌 Получение списка плагинов...", 'yellow')
+    print_colored("🔌 Получение списка плагинов в репозитории...", 'yellow')
     plugins = get_available_plugins()
     
     if not plugins:
@@ -937,19 +940,6 @@ def list_plugins():
     print()
     print_colored("Использование: ping-status --install-plugin <название_плагина>", 'green')
 
-def install_plugin(plugin_name):
-    """Установить плагин по имени"""
-    plugins = get_available_plugins()
-    
-    if plugin_name not in plugins:
-        print_colored(f"❌ Плагин '{plugin_name}' не найден", 'red')
-        print_colored("Доступные плагины:", 'yellow')
-        list_plugins()
-        return False
-    
-    plugin_url = plugins[plugin_name]
-    return install_plugin_from_url(plugin_url, plugin_name)
-
 def install_plugin_from_url(plugin_url, plugin_name, update=False):
     """Установить плагин из URL"""
     if update:
@@ -962,20 +952,15 @@ def install_plugin_from_url(plugin_url, plugin_name, update=False):
         with urllib.request.urlopen(plugin_url) as response:
             plugin_content = response.read().decode('utf-8')
         
-        # Добавляем метаданные в плагин
-        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        metadata_header = f'''# Метаданные плагина для автоматического обновления
-__plugin_url__ = "{plugin_url}"
-__name__ = "{plugin_name}"
-__last_updated__ = "{current_time}"
-
-'''
-        
         # Сохранить в директорию плагинов
         plugins_dir = Path.home() / '.config' / 'ping-status' / 'plugins'
         plugins_dir.mkdir(parents=True, exist_ok=True)
         
-        plugin_path = plugins_dir / f"{plugin_name}.plugin.py"
+        
+        if plugin_name.endswith('.plugin'):
+            plugin_path = plugins_dir / f"{plugin_name}.py"
+        else:
+            plugin_path = plugins_dir / f"{plugin_name}.plugin.py"
         
         # Сделать бэкап существующего плагина
         if plugin_path.exists():
@@ -983,9 +968,9 @@ __last_updated__ = "{current_time}"
             shutil.copy2(str(plugin_path), str(backup_path))
             print_colored(f"💾 Создан бэкап: {backup_path}", 'blue')
         
-        # Сохранить новый плагин с метаданными
+        # Сохранить новый плагин
         with open(plugin_path, 'w', encoding='utf-8') as f:
-            f.write(metadata_header + plugin_content)
+            f.write(plugin_content)
         
         if update:
             print_colored(f"✅ Плагин '{plugin_name}' успешно обновлен!", 'green')
