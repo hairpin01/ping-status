@@ -9,6 +9,7 @@ import urllib.request
 import tempfile
 import hashlib
 import json
+inport time
 import shutil
 import importlib.util
 import re
@@ -24,6 +25,157 @@ RAW_SCRIPT = "https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads
 RAW_CONFIG = "https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/main/ping_status.conf"
 THEMES_BASE_URL = "https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/main/theme/"
 PLUGINS_BASE_URL = "https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/main/plugins/"
+
+def get_plugin_metadata(plugin_path):
+    """Получить метаданные плагина из файла"""
+    metadata = {
+        'name': plugin_path.stem,
+        'url': None,
+        'version': None,
+        'last_updated': None
+    }
+    
+    try:
+        with open(plugin_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+            
+            # Ищем URL плагина
+            url_match = re.search(r'__plugin_url__\s*=\s*[\'"]([^\'"]+)[\'"]', content)
+            if url_match:
+                metadata['url'] = url_match.group(1)
+            
+            # Ищем версию плагина
+            version_match = re.search(r'__version__\s*=\s*[\'"]([^\'"]+)[\'"]', content)
+            if version_match:
+                metadata['version'] = version_match.group(1)
+            
+            # Ищем дату последнего обновления
+            update_match = re.search(r'__last_updated__\s*=\s*[\'"]([^\'"]+)[\'"]', content)
+            if update_match:
+                metadata['last_updated'] = update_match.group(1)
+                
+    except Exception as e:
+        print_colored(f"❌ Ошибка чтения метаданных плагина {plugin_path}: {e}", 'red')
+    
+    return metadata
+
+# Добавим функцию для проверки обновлений плагина
+def check_plugin_update(plugin_path):
+    """Проверить наличие обновлений для плагина"""
+    metadata = get_plugin_metadata(plugin_path)
+    
+    if not metadata['url']:
+        return None, "No update URL"
+    
+    try:
+        # Получаем удаленную версию
+        with urllib.request.urlopen(metadata['url']) as response:
+            remote_content = response.read().decode('utf-8')
+        
+        # Ищем версию в удаленном файле
+        remote_version_match = re.search(r'__version__\s*=\s*[\'"]([^\'"]+)[\'"]', remote_content)
+        remote_last_updated_match = re.search(r'__last_updated__\s*=\s*[\'"]([^\'"]+)[\'"]', remote_content)
+        
+        remote_version = remote_version_match.group(1) if remote_version_match else "unknown"
+        remote_last_updated = remote_last_updated_match.group(1) if remote_last_updated_match else "unknown"
+        
+        # Сравниваем версии
+        if metadata['version'] != remote_version or metadata['last_updated'] != remote_last_updated:
+            return {
+                'plugin_name': metadata['name'],
+                'local_version': metadata['version'],
+                'remote_version': remote_version,
+                'local_updated': metadata['last_updated'],
+                'remote_updated': remote_last_updated,
+                'url': metadata['url']
+            }, None
+        else:
+            return None, "Up to date"
+            
+    except Exception as e:
+        return None, f"Update check failed: {e}"
+
+# Добавим функцию для обновления всех плагинов
+def update_all_plugins():
+    """Обновить все плагины, у которых есть URL обновления"""
+    plugins_dir = Path.home() / '.config' / 'ping-status' / 'plugins'
+    
+    if not plugins_dir.exists():
+        print_colored("📭 Директория плагинов не найдена", 'yellow')
+        return False
+    
+    plugins_updated = 0
+    plugins_failed = 0
+    
+    print_colored("🔍 Поиск обновлений для плагинов...", 'yellow')
+    
+    for plugin_file in plugins_dir.glob('*.py'):
+        update_info, error = check_plugin_update(plugin_file)
+        
+        if update_info:
+            print_colored(f"🔄 Найдено обновление для {update_info['plugin_name']}:", 'cyan')
+            print_colored(f"   Локальная версия: {update_info['local_version']} ({update_info['local_updated']})", 'blue')
+            print_colored(f"   Удаленная версия: {update_info['remote_version']} ({update_info['remote_updated']})", 'green')
+            
+            try:
+                confirm = input("   Обновить? (y/N): ").strip().lower()
+                if confirm == 'y':
+                    if install_plugin_from_url(update_info['url'], update_info['plugin_name'], update=True):
+                        plugins_updated += 1
+                    else:
+                        plugins_failed += 1
+                else:
+                    print_colored("   ❌ Обновление отменено", 'yellow')
+            except KeyboardInterrupt:
+                print_colored("\n   ❌ Обновление отменено", 'yellow')
+        elif error and error != "Up to date":
+            print_colored(f"⚠️  {plugin_file.stem}: {error}", 'yellow')
+    
+    if plugins_updated > 0 or plugins_failed > 0:
+        print_colored(f"\n📊 Итог обновления:", 'cyan')
+        print_colored(f"   ✅ Обновлено: {plugins_updated}", 'green')
+        print_colored(f"   ❌ Ошибок: {plugins_failed}", 'red' if plugins_failed > 0 else 'green')
+    else:
+        print_colored("✅ Все плагины актуальны", 'green')
+    
+    return plugins_updated > 0
+
+# Добавим функцию для обновления конкретного плагина
+def update_plugin(plugin_name):
+    """Обновить конкретный плагин"""
+    plugins_dir = Path.home() / '.config' / 'ping-status' / 'plugins'
+    plugin_path = plugins_dir / f"{plugin_name}.plugin.py"
+    
+    if not plugin_path.exists():
+        # Попробуем найти без расширения
+        plugin_path = plugins_dir / f"{plugin_name}.py"
+        if not plugin_path.exists():
+            print_colored(f"❌ Плагин '{plugin_name}' не найден", 'red')
+            return False
+    
+    update_info, error = check_plugin_update(plugin_path)
+    
+    if update_info:
+        print_colored(f"🔄 Найдено обновление для {update_info['plugin_name']}:", 'cyan')
+        print_colored(f"   Локальная версия: {update_info['local_version']} ({update_info['local_updated']})", 'blue')
+        print_colored(f"   Удаленная версия: {update_info['remote_version']} ({update_info['remote_updated']})", 'green')
+        
+        try:
+            confirm = input("Обновить? (y/N): ").strip().lower()
+            if confirm == 'y':
+                return install_plugin_from_url(update_info['url'], update_info['plugin_name'], update=True)
+            else:
+                print_colored("❌ Обновление отменено", 'yellow')
+                return False
+        except KeyboardInterrupt:
+            print_colored("\n❌ Обновление отменено", 'yellow')
+            return False
+    elif error:
+        print_colored(f"❌ {error}", 'red')
+        return False
+    else:
+        print_colored("✅ Плагин уже актуален", 'green')
+        return True
 
 def version_check(required_version, component_name="component"):
     """Проверка совместимости версий"""
@@ -766,20 +918,31 @@ def install_plugin(plugin_name):
     plugin_url = plugins[plugin_name]
     return install_plugin_from_url(plugin_url, plugin_name)
 
-def install_plugin_from_url(plugin_url, plugin_name="custom"):
+def install_plugin_from_url(plugin_url, plugin_name="custom", update=False):
     """Установить плагин из URL"""
-    print_colored(f"🔌 Установка плагина '{plugin_name}'...", 'yellow')
+    if update:
+        print_colored(f"🔄 Обновление плагина '{plugin_name}'...", 'yellow')
+    else:
+        print_colored(f"🔌 Установка плагина '{plugin_name}'...", 'yellow')
     
     try:
         # Скачать плагин
         with urllib.request.urlopen(plugin_url) as response:
             plugin_content = response.read().decode('utf-8')
         
+        # Добавляем метаданные в плагин
+        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        metadata_header = f'''# Метаданные плагина для автоматического обновления
+__plugin_url__ = "{plugin_url}"
+__name__ = "{plugin_name}"
+__last_updated__ = "{current_time}"
+
+'''
+        
         # Сохранить в директорию плагинов
         plugins_dir = Path.home() / '.config' / 'ping-status' / 'plugins'
         plugins_dir.mkdir(parents=True, exist_ok=True)
         
-        # Сохраняем с расширением .plugin.py для кастомных плагинов
         plugin_path = plugins_dir / f"{plugin_name}.plugin.py"
         
         # Сделать бэкап существующего плагина
@@ -788,21 +951,50 @@ def install_plugin_from_url(plugin_url, plugin_name="custom"):
             shutil.copy2(str(plugin_path), str(backup_path))
             print_colored(f"💾 Создан бэкап: {backup_path}", 'blue')
         
-        # Сохранить новый плагин
-        with open(plugin_path, 'w') as f:
-            f.write(plugin_content)
+        # Сохранить новый плагин с метаданными
+        with open(plugin_path, 'w', encoding='utf-8') as f:
+            f.write(metadata_header + plugin_content)
         
-        print_colored(f"✅ Плагин '{plugin_name}' успешно установлен!", 'green')
+        if update:
+            print_colored(f"✅ Плагин '{plugin_name}' успешно обновлен!", 'green')
+        else:
+            print_colored(f"✅ Плагин '{plugin_name}' успешно установлен!", 'green')
         
         # Показать справку по установленному плагину
-        print_colored("\n📖 Справка по плагину:", 'cyan')
-        get_plugin_help(plugin_name)
+        if not update:
+            print_colored("\n📖 Справка по плагину:", 'cyan')
+            get_plugin_help(plugin_name)
         
         return True
         
     except Exception as e:
-        print_colored(f"❌ Ошибка установки плагина: {e}", 'red')
+        print_colored(f"❌ Ошибка {'обновления' if update else 'установки'} плагина: {e}", 'red')
         return False
+
+def show_plugins_info():
+    """Показать информацию об установленных плагинах"""
+    plugins_dir = Path.home() / '.config' / 'ping-status' / 'plugins'
+    
+    if not plugins_dir.exists():
+        print_colored("📭 Плагины не установлены", 'yellow')
+        return
+    
+    print_colored("📦 Установленные плагины:", 'cyan')
+    print()
+    
+    for plugin_file in plugins_dir.glob('*.py'):
+        metadata = get_plugin_metadata(plugin_file)
+        
+        print_colored(f"🔧 {metadata['name']}", 'yellow')
+        if metadata['version']:
+            print_colored(f"   Версия: {metadata['version']}", 'blue')
+        if metadata['last_updated']:
+            print_colored(f"   Обновлен: {metadata['last_updated']}", 'green')
+        if metadata['url']:
+            print_colored(f"   URL: {metadata['url']}", 'white')
+        else:
+            print_colored("   ⚠️  Нет URL для обновления", 'red')
+        print()
 
 def main():
     parser = argparse.ArgumentParser(description='Ping Status Monitor')
@@ -817,6 +1009,10 @@ def main():
     parser.add_argument('--install-plugin', help='Установить плагин по имени')
     parser.add_argument('--plugin-url', help='Установить плагин из URL')
     parser.add_argument('--plugin-help', nargs='?', const='', help='Показать справку по плагинам')
+    # Новые аргументы для управления плагинами
+    parser.add_argument('--update-plugins', action='store_true', help='Обновить все плагины')
+    parser.add_argument('--update-plugin', help='Обновить конкретный плагин')
+    parser.add_argument('--plugins-info', action='store_true', help='Показать информацию о плагинах')
     
     args = parser.parse_args()
     
@@ -845,6 +1041,13 @@ def main():
             get_plugin_help()
         else:
             get_plugin_help(args.plugin_help)
+    # Обработка новых аргументов
+    elif args.update_plugins:
+        update_all_plugins()
+    elif args.update_plugin:
+        update_plugin(args.update_plugin)
+    elif args.plugins_info:
+        show_plugins_info()
     else:
         show_status()
 
