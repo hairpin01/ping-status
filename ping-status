@@ -1335,8 +1335,7 @@ def main():
         show_plugins_info()
     # Обработка основных аргументов
     elif args.version:
-        current_branch = get_current_branch()
-        print_colored(f"Ping Status Monitor v{__version__} ({current_branch})", 'cyan')
+        print_colored(f"Ping Status Monitor v{__version__}", 'cyan')
         print_colored(f"Автор: {__author__}", 'blue')
         print_colored("GitHub: https://github.com/hairpin01/ping-status", 'blue')
     elif args.check_update:
