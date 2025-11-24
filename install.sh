@@ -9,10 +9,10 @@ CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
 # URLs
-RAW_INSTALL="https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/main/install.sh"
-RAW_SCRIPT="https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/main/ping-status"
-RAW_CONFIG="https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/main/ping_status.conf"
-THEMES_BASE_URL="https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/main/theme/"
+RAW_INSTALL="https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/dev/install.sh"
+RAW_SCRIPT="https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/dev/ping-status"
+RAW_CONFIG="https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/dev/ping_status.conf"
+THEMES_BASE_URL="https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/dev/theme/"
 
 # Available themes
 declare -A THEMES=(
