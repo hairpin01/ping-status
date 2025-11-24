@@ -15,8 +15,10 @@ import importlib.util
 import re
 from pathlib import Path
 from datetime import datetime
+import difflib
+from urllib.error import URLError, HTTPError
 
-__version__ = "3.3.4"
+__version__ = "3.3.5"
 __author__ = "hairpin01"
 
 # URLs для обновления
@@ -525,6 +527,88 @@ def show_status():
         output = apply_global_colors(output, global_color)
     
     print(output)
+def get_plugin_repository():
+    """Получить настройки репозитория плагинов из конфига"""
+    config = load_config()
+    
+    # Пытаемся получить кастомный репозиторий
+    repo_url = config.get('plugin-repo', 'base_url', fallback='')
+    timeout = config.getint('plugin-repo', 'timeout', fallback=10)
+    enabled = config.getboolean('plugin-repo', 'enabled', fallback=True)
+    
+    if not repo_url or not enabled:
+        # Используем стандартный репозиторий
+        repo_url = "https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/main"
+    
+    # Убедимся что URL заканчивается правильно
+    if not repo_url.endswith('/'):
+        repo_url += '/'
+    
+    return {
+        'base_url': repo_url,
+        'timeout': timeout,
+        'enabled': enabled
+    }
+
+def find_similar_plugins(plugin_name, available_plugins):
+    """Найти похожие плагины по имени"""
+    plugin_names = list(available_plugins.keys())
+    
+    # Используем difflib для поиска похожих
+    matches = difflib.get_close_matches(plugin_name, plugin_names, n=5, cutoff=0.3)
+    
+    # Также ищем частичные совпадения
+    partial_matches = [name for name in plugin_names if plugin_name.lower() in name.lower()]
+    
+    # Объединяем результаты, убирая дубликаты
+    all_matches = list(dict.fromkeys(matches + partial_matches))
+    
+    return all_matches[:5]  # Возвращаем не более 5 результатов
+
+def install_plugin(plugin_name):
+    """Установить плагин по имени с улучшенной логикой"""
+    print_colored(f"🔍 Поиск плагина '{plugin_name}'...", 'yellow')
+    
+    # Получаем доступные плагины
+    available_plugins = get_available_plugins()
+    
+    # Проверяем точное совпадение
+    if plugin_name in available_plugins:
+        plugin_url = available_plugins[plugin_name]
+        return install_plugin_from_url(plugin_url, plugin_name)
+    
+    # Проверяем с добавлением .plugin
+    plugin_name_with_suffix = f"{plugin_name}.plugin"
+    if plugin_name_with_suffix in available_plugins:
+        plugin_url = available_plugins[plugin_name_with_suffix]
+        return install_plugin_from_url(plugin_url, plugin_name)
+    
+    # Ищем похожие плагины
+    similar_plugins = find_similar_plugins(plugin_name, available_plugins)
+    
+    if similar_plugins:
+        print_colored(f"❌ Плагин '{plugin_name}' не найден. Возможно вы имели в виду:", 'red')
+        for i, similar in enumerate(similar_plugins, 1):
+            print_colored(f"   {i}. {similar}", 'green')
+        
+        try:
+            choice = input("\nВыберите плагин для установки (номер) или Enter для отмены: ").strip()
+            if choice.isdigit() and 1 <= int(choice) <= len(similar_plugins):
+                selected_plugin = similar_plugins[int(choice) - 1]
+                plugin_url = available_plugins[selected_plugin]
+                return install_plugin_from_url(plugin_url, selected_plugin)
+            else:
+                print_colored("❌ Установка отменена", 'yellow')
+                return False
+        except (KeyboardInterrupt, EOFError):
+            print_colored("\n❌ Установка отменена", 'yellow')
+            return False
+    else:
+        print_colored(f"❌ Плагин '{plugin_name}' не найден.", 'red')
+        print_colored("📋 Доступные плагины:", 'yellow')
+        for plugin in sorted(available_plugins.keys()):
+            print_colored(f"   • {plugin}", 'blue')
+        return False
 
 def download_file(url, dest_path):
     """Скачать файл по URL"""
@@ -651,6 +735,32 @@ def perform_update():
                 print_colored("⚠️  Требуется ручное восстановление из бэкапа", 'yellow')
             
             return False
+
+def perform_update_termux():
+    """Обновление для Termux без root"""
+    print_colored("🔄 Обновление для Termux...", 'yellow')
+    
+    try:
+        # Скачать новый скрипт
+        script_url = "https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/main/ping-status"
+        
+        with urllib.request.urlopen(script_url) as response:
+            new_script = response.read().decode('utf-8')
+        
+        # Определить путь в Termux
+        termux_path = os.path.expanduser("~/.termux/ping-status")
+        
+        # Сохранить новый скрипт
+        with open(termux_path, 'w') as f:
+            f.write(new_script)
+        
+        os.chmod(termux_path, 0o755)
+        print_colored("✅ Скрипт обновлен! Перезапустите Termux.", 'green')
+        return True
+        
+    except Exception as e:
+        print_colored(f"❌ Ошибка обновления: {e}", 'red')
+        return False
 
 def uninstall():
     """Удалить ping-status"""
@@ -903,26 +1013,66 @@ def apply_theme_from_url(theme_url, theme_name="custom"):
         return False
 
 def get_available_plugins():
-    """Получить список доступных плагинов из GitHub"""
+    """Получить список доступных плагинов с поддержкой кастомных репозиториев"""
+    repo_config = get_plugin_repository()
+    base_url = repo_config['base_url']
+    timeout = repo_config['timeout']
+    
+    plugins = {}
+    
     try:
-        # Используем GitHub API для получения списка файлов в директории plugins
-        api_url = "https://api.github.com/repos/hairpin01/ping-status/contents/plugins"
-        with urllib.request.urlopen(api_url) as response:
-            contents = json.loads(response.read().decode('utf-8'))
+        # Формируем URL для API GitHub или прямого доступа
+        if 'github.com' in base_url:
+            # Используем GitHub API
+            repo_path = base_url.replace('https://raw.githubusercontent.com/', '')
+            if '/main' in repo_path or '/master' in repo_path:
+                api_url = f"https://api.github.com/repos/{repo_path.replace('/main', '').replace('/master', '')}/contents/plugins"
+            else:
+                api_url = f"https://api.github.com/repos/{repo_path}/contents/plugins"
+        else:
+            # Для кастомных репозиториев пытаемся получить listing
+            api_url = f"{base_url}plugins/"
         
-        plugins = {}
-        for item in contents:
-            if item['name'].endswith('.py'):
-                plugin_name = item['name'].replace('.py', '')
-                # Убираем .plugin из имени если есть
-                if plugin_name.endswith('.plugin'):
-                    plugin_name = plugin_name[:-7]
-                plugins[plugin_name] = item['download_url']
+        # Загружаем с таймаутом
+        with urllib.request.urlopen(api_url, timeout=timeout) as response:
+            if 'github.com' in base_url:
+                contents = json.loads(response.read().decode('utf-8'))
+                
+                for item in contents:
+                    if item['name'].endswith('.py'):
+                        plugin_name = item['name'].replace('.py', '')
+                        # Убираем .plugin если есть в имени
+                        if plugin_name.endswith('.plugin'):
+                            plugin_name = plugin_name[:-7]
+                        plugins[plugin_name] = item['download_url']
+            else:
+                # Для кастомных репозиториев - простая реализация
+                content = response.read().decode('utf-8')
+                # Парсим HTML или простой список файлов
+                import re
+                plugin_files = re.findall(r'href="([^"]+\.py)"', content)
+                for file in plugin_files:
+                    plugin_name = file.replace('.py', '')
+                    if plugin_name.endswith('.plugin'):
+                        plugin_name = plugin_name[:-7]
+                    plugins[plugin_name] = f"{base_url}plugins/{file}"
         
         return plugins
-    except Exception as e:
-        print_colored(f"❌ Не удалось получить список плагинов: {e}", 'red')
-        return {} 
+        
+    except (URLError, HTTPError, Exception) as e:
+        print_colored(f"⚠️  Не удалось загрузить список плагинов: {e}", 'yellow')
+        
+        # Возвращаем базовый список как fallback
+        fallback_plugins = {
+            "system-info": f"{base_url}plugins/system-info.plugin.py",
+            "weather": f"{base_url}plugins/weather.plugin.py", 
+            "multi-ping": f"{base_url}plugins/multi-ping.plugin.py",
+            "network-speed": f"{base_url}plugins/network-speed.plugin.py",
+            "crypto-prices": f"{base_url}plugins/crypto-prices.plugin.py"
+        }
+        
+        print_colored("📋 Используется базовый список плагинов", 'blue')
+        return fallback_plugins
 
 def list_plugins():
     """Показать список доступных плагинов"""
@@ -940,27 +1090,45 @@ def list_plugins():
     print()
     print_colored("Использование: ping-status --install-plugin <название_плагина>", 'green')
 
-def install_plugin_from_url(plugin_url, plugin_name, update=False):
+def show_plugin_repo_info():
+    """Показать информацию о репозитории плагинов"""
+    repo_config = get_plugin_repository()
+    
+    print_colored("📦 Информация о репозитории плагинов:", 'cyan')
+    print_colored(f"   URL: {repo_config['base_url']}", 'blue')
+    print_colored(f"   Таймаут: {repo_config['timeout']}с", 'blue')
+    print_colored(f"   Включен: {'Да' if repo_config['enabled'] else 'Нет'}", 'blue')
+    
+    # Показываем доступные плагины
+    print_colored("\n📋 Доступные плагины:", 'cyan')
+    plugins = get_available_plugins()
+    for plugin in sorted(plugins.keys()):
+        print_colored(f"   • {plugin}", 'green')
+
+def install_plugin_from_url(plugin_url, plugin_name="custom", update=False):
     """Установить плагин из URL"""
+    repo_config = get_plugin_repository()
+    timeout = repo_config['timeout']
+    
     if update:
         print_colored(f"🔄 Обновление плагина '{plugin_name}'...", 'yellow')
     else:
         print_colored(f"🔌 Установка плагина '{plugin_name}'...", 'yellow')
     
     try:
-        # Скачать плагин
-        with urllib.request.urlopen(plugin_url) as response:
+        # Скачать плагин с таймаутом
+        with urllib.request.urlopen(plugin_url, timeout=timeout) as response:
             plugin_content = response.read().decode('utf-8')
         
         # Сохранить в директорию плагинов
         plugins_dir = Path.home() / '.config' / 'ping-status' / 'plugins'
         plugins_dir.mkdir(parents=True, exist_ok=True)
         
-        
+        # Убираем .plugin из имени если оно есть
         if plugin_name.endswith('.plugin'):
-            plugin_path = plugins_dir / f"{plugin_name}.py"
-        else:
-            plugin_path = plugins_dir / f"{plugin_name}.plugin.py"
+            plugin_name = plugin_name[:-7]
+        
+        plugin_path = plugins_dir / f"{plugin_name}.plugin.py"
         
         # Сделать бэкап существующего плагина
         if plugin_path.exists():
@@ -984,9 +1152,41 @@ def install_plugin_from_url(plugin_url, plugin_name, update=False):
         
         return True
         
+    except URLError as e:
+        print_colored(f"❌ Ошибка сети при установке плагина: {e}", 'red')
+        return False
+    except HTTPError as e:
+        print_colored(f"❌ Ошибка HTTP {e.code}: {e.reason}", 'red')
+        return False
     except Exception as e:
         print_colored(f"❌ Ошибка {'обновления' if update else 'установки'} плагина: {e}", 'red')
         return False
+
+def set_plugin_repository(repo_url):
+    """Установить кастомный репозиторий плагинов"""
+    config_path = Path.home() / '.config' / 'ping-status.conf'
+    
+    # Читаем текущий конфиг
+    config = configparser.ConfigParser()
+    config.read(config_path)
+    
+    # Добавляем или обновляем секцию plugin-repo
+    if not config.has_section('plugin-repo'):
+        config.add_section('plugin-repo')
+    
+    config.set('plugin-repo', 'base_url', repo_url)
+    config.set('plugin-repo', 'enabled', 'true')
+    config.set('plugin-repo', 'timeout', '10')
+    
+    # Сохраняем конфиг
+    with open(config_path, 'w') as f:
+        config.write(f)
+    
+    print_colored(f"✅ Репозиторий плагинов установлен: {repo_url}", 'green')
+    print_colored("📋 Доступные плагины в новом репозитории:", 'cyan')
+    
+    # Показываем плагины из нового репозитория
+    show_plugin_repo_info()
 
 def show_plugins_info():
     """Показать информацию об установленных плагинах"""
@@ -1026,13 +1226,19 @@ def main():
     parser.add_argument('--install-plugin', help='Установить плагин по имени')
     parser.add_argument('--plugin-url', help='Установить плагин из URL')
     parser.add_argument('--plugin-help', nargs='?', const='', help='Показать справку по плагинам')
-    # Новые аргументы для управления плагинами
     parser.add_argument('--update-plugins', action='store_true', help='Обновить все плагины')
     parser.add_argument('--update-plugin', help='Обновить конкретный плагин')
     parser.add_argument('--plugins-info', action='store_true', help='Показать информацию о плагинах')
+    # Новые аргументы для управления репозиторием
+    parser.add_argument('--plugin-repo-info', action='store_true', help='Показать информацию о репозитории')
+    parser.add_argument('--set-plugin-repo', help='Установить кастомный репозиторий')
     
     args = parser.parse_args()
     
+    if args.plugin_repo_info:
+        show_plugin_repo_info()
+    elif args.set_plugin_repo:
+        set_plugin_repository(args.set_plugin_repo)
     if args.version:
         show_version()
     elif args.check_update:
@@ -1045,12 +1251,21 @@ def main():
         list_themes()
     elif args.theme:
         apply_theme(args.theme)
+    elif args.update:
+    if 'com.termux' in os.environ.get('PREFIX', ''):
+        perform_update_termux()
+    else:
+        perform_update()
     elif args.theme_url:
         apply_theme_from_url(args.theme_url, "custom")
     elif args.list_plugins:
         list_plugins()
     elif args.install_plugin:
-        install_plugin(args.install_plugin)
+      if 'install_plugin' in globals():
+          install_plugin(args.install_plugin)
+      else:
+          print_colored("❌ Функция установки плагинов недоступна в этой версии", 'red')
+          print_colored("📝 Создайте плагин вручную: ~/.config/ping-status/plugins/", 'blue')
     elif args.plugin_url:
         install_plugin_from_url(args.plugin_url, "custom")
     elif args.plugin_help is not None:
