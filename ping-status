@@ -1236,7 +1236,7 @@ def main():
     args = parser.parse_args()
     
     # Обработка аргументов репозитория плагинов
-    elif args.plugin_repo_info:
+    if args.plugin_repo_info:
         show_plugin_repo_info()
     elif args.set_plugin_repo:
         set_plugin_repository(args.set_plugin_repo)
