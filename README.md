@@ -51,6 +51,10 @@ Hostname: arch-pc
 ```
 ./install --update
 ```
+Or
+```
+sudo ping-status --update
+```
 # Troubleshooting
 The command was not found
 ```
@@ -188,4 +192,25 @@ api_key = YOUR_API_KEY_HERE
 city = Moscow
 units = metric
 lang = en
+```
+### dev branch
+```
+curl -O https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/dev/install.sh | bash
+```
+## custom repo | setting install_plugin for repo
+add the value to the cfg
+`[plugin-repo]`
+```
+# Base URL for plugins (leave it empty for the standard one)
+base_url = https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/main
+```
+```
+# Download timeout in seconds
+timeout = 10
+```
+> [!TIP]
+> set the value enabled to true if you have specified a custom repository.
+```
+# Enable custom repository (true/false)
+enabled = true
 ```
