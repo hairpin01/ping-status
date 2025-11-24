@@ -20,6 +20,21 @@ curl -O https://raw.githubusercontent.com/hairpin01/ping-status/main/install.sh 
 pip install psutil
 ```
 
+> [!WARNING]
+> or install it directly
+```
+# Download the script directly
+curl -o ping-status https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/main/ping-status
+```
+```
+# Make
+chmod +x ping-status executable
+```
+```
+# Manually install
+sudo cp ping-status /usr/local/bin/
+sudo ln -sf /usr/local/bin/ping-status /usr/local/bin/p
+```
 # Installation options
  `Skip installing` dependencies `--skip-deps`
  Update the configuration only `--config-only`
