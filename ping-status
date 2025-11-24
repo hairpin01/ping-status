@@ -529,26 +529,99 @@ def show_status():
     print(output)
 def get_plugin_repository():
     """Получить настройки репозитория плагинов из конфига"""
-    config = load_config()
+    config_path = Path.home() / '.config' / 'ping-status.conf'
+    if not config_path.exists():
+        config_path = Path('/etc/ping-status.conf')
     
-    # Пытаемся получить кастомный репозиторий
-    repo_url = config.get('plugin-repo', 'base_url', fallback='')
-    timeout = config.getint('plugin-repo', 'timeout', fallback=10)
-    enabled = config.getboolean('plugin-repo', 'enabled', fallback=True)
+    config = configparser.ConfigParser()
+    config.read(config_path)
     
-    if not repo_url or not enabled:
-        # Используем стандартный репозиторий
-        repo_url = "https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/main"
+    # Получаем настройки с проверкой наличия секции и опций
+    base_url = ""
+    timeout = 10
+    enabled = True
+    
+    if config.has_section('plugin-repo'):
+        try:
+            base_url = config.get('plugin-repo', 'base_url')
+        except (configparser.NoOptionError, configparser.NoSectionError):
+            base_url = ""
+        
+        try:
+            timeout = config.getint('plugin-repo', 'timeout')
+        except (configparser.NoOptionError, configparser.NoSectionError):
+            timeout = 10
+        
+        try:
+            enabled = config.getboolean('plugin-repo', 'enabled')
+        except (configparser.NoOptionError, configparser.NoSectionError):
+            enabled = True
+    
+    # Если URL не указан или репозиторий отключен, используем стандартный
+    if not base_url or not enabled:
+        base_url = "https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/main"
     
     # Убедимся что URL заканчивается правильно
-    if not repo_url.endswith('/'):
-        repo_url += '/'
+    if not base_url.endswith('/'):
+        base_url += '/'
     
     return {
-        'base_url': repo_url,
+        'base_url': base_url,
         'timeout': timeout,
         'enabled': enabled
     }
+
+def show_plugin_repo_info():
+    """Показать информацию о репозитории плагинов"""
+    try:
+        repo_config = get_plugin_repository()
+        
+        print_colored("📦 Информация о репозитории плагинов:", 'cyan')
+        print_colored(f"   URL: {repo_config['base_url']}", 'blue')
+        print_colored(f"   Таймаут: {repo_config['timeout']}с", 'blue')
+        print_colored(f"   Включен: {'Да' if repo_config['enabled'] else 'Нет'}", 'blue')
+        
+        # Показываем доступные плагины
+        print_colored("\n📋 Доступные плагины:", 'cyan')
+        plugins = get_available_plugins()
+        if plugins:
+            for plugin in sorted(plugins.keys()):
+                print_colored(f"   • {plugin}", 'green')
+        else:
+            print_colored("   ❌ Не удалось загрузить список плагинов", 'red')
+            
+    except Exception as e:
+        print_colored(f"❌ Ошибка при получении информации о репозитории: {e}", 'red')
+
+def set_plugin_repository(repo_url):
+    """Установить кастомный репозиторий плагинов"""
+    try:
+        config_path = Path.home() / '.config' / 'ping-status.conf'
+        
+        # Читаем текущий конфиг
+        config = configparser.ConfigParser()
+        config.read(config_path)
+        
+        # Добавляем или обновляем секцию plugin-repo
+        if not config.has_section('plugin-repo'):
+            config.add_section('plugin-repo')
+        
+        config.set('plugin-repo', 'base_url', repo_url)
+        config.set('plugin-repo', 'enabled', 'true')
+        config.set('plugin-repo', 'timeout', '10')
+        
+        # Сохраняем конфиг
+        with open(config_path, 'w') as f:
+            config.write(f)
+        
+        print_colored(f"✅ Репозиторий плагинов установлен: {repo_url}", 'green')
+        print_colored("📋 Доступные плагины в новом репозитории:", 'cyan')
+        
+        # Показываем плагины из нового репозитория
+        show_plugin_repo_info()
+        
+    except Exception as e:
+        print_colored(f"❌ Ошибка при установке репозитория: {e}", 'red')
 
 def find_similar_plugins(plugin_name, available_plugins):
     """Найти похожие плагины по имени"""
