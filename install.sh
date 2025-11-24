@@ -58,35 +58,80 @@ detect_distro() {
 }
 
 # Function to install dependencies
+# Функция install_dependencies - замени эту функцию в install.sh
+
 install_dependencies() {
     local distro=$1
     
     case $distro in
         "arch" | "manjaro")
-            print_status "Installing dependencies for Arch Linux..."
-            sudo pacman -Syu --noconfirm
-            sudo pacman -S --noconfirm python3
+            print_status "Проверка зависимостей для Arch Linux..."
+            
+            # Проверяем, установлен ли уже python3
+            if command -v python3 &> /dev/null; then
+                print_status "Python3 уже установлен"
+            else
+                print_status "Установка Python3..."
+                sudo pacman -S --noconfirm python
+            fi
+            
+            # Проверяем наличие pip
+            if ! command -v pip3 &> /dev/null && ! python3 -m pip --version &> /dev/null; then
+                print_status "Установка python-pip..."
+                sudo pacman -S --noconfirm python-pip
+            fi
             ;;
+            
         "ubuntu" | "debian" | "linuxmint")
-            print_status "Installing dependencies for Ubuntu/Debian..."
-            sudo apt update
-            sudo apt install -y python3 python3-pip wget
-            ;;
-        "fedora" | "centos" | "rhel")
-            print_status "Installing dependencies for Fedora/CentOS..."
-            sudo dnf update -y
-            sudo dnf install -y python3 python3-pip wget
-            ;;
-        "termux")
-            print_status "Installing dependencies for Termux..."
-            pkg update -y
-            pkg install -y python wget
-            ;;
-        *)
-            print_warning "Unknown distribution. Trying to proceed with system Python..."
+            print_status "Проверка зависимостей для Ubuntu/Debian..."
+            
             if ! command -v python3 &> /dev/null; then
-                print_error "Python3 not found. Please install it manually."
+                print_status "Установка Python3..."
+                sudo apt update
+                sudo apt install -y python3
+            fi
+            
+            if ! command -v pip3 &> /dev/null && ! python3 -m pip --version &> /dev/null; then
+                print_status "Установка python3-pip..."
+                sudo apt install -y python3-pip
+            fi
+            ;;
+            
+        "fedora" | "centos" | "rhel")
+            print_status "Проверка зависимостей для Fedora/CentOS..."
+            
+            if ! command -v python3 &> /dev/null; then
+                print_status "Установка Python3..."
+                sudo dnf install -y python3
+            fi
+            
+            if ! command -v pip3 &> /dev/null && ! python3 -m pip --version &> /dev/null; then
+                print_status "Установка python3-pip..."
+                sudo dnf install -y python3-pip
+            fi
+            ;;
+            
+        "termux")
+            print_status "Проверка зависимостей для Termux..."
+            
+            if ! command -v python &> /dev/null; then
+                print_status "Установка Python..."
+                pkg update -y
+                pkg install -y python
+            fi
+            
+            if ! command -v pip &> /dev/null && ! python -m pip --version &> /dev/null; then
+                print_status "Python уже установлен с pip"
+            fi
+            ;;
+            
+        *)
+            print_warning "Неизвестный дистрибутив. Проверяем наличие Python3..."
+            if ! command -v python3 &> /dev/null && ! command -v python &> /dev/null; then
+                print_error "Python3 не найден. Пожалуйста, установите его вручную."
                 exit 1
+            else
+                print_status "Python найден, продолжаем установку..."
             fi
             ;;
     esac
@@ -414,9 +459,19 @@ main() {
         exit 0
     fi
     
-    # Install dependencies if not skipped
+
     if [ "$SKIP_DEPS" = false ]; then
         install_dependencies "$DISTRO"
+    else
+        print_status "Пропуск установки зависимостей (по запросу пользователя)"
+    
+        # Все равно проверяем наличие Python
+        if ! command -v python3 &> /dev/null && ! command -v python &> /dev/null; then
+            print_error "Python не найден! Установите Python3 вручную или запустите без --skip-deps"
+            exit 1
+        else
+            print_status "Python обнаружен, продолжаем..."
+        fi
     fi
     
     # Install script and config
