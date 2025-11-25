@@ -2,7 +2,7 @@
 # Метаданные плагина
 __plugin_url__ = "https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/main/plugins-dev/system-load.plugin.py"
 __name__ = "system-load"
-__last_updated__ = "2024-01-15 12:00:00"
+__last_updated__ = "2025-11-25 18:16:00"
 __version__ = "1.0.0"
 __min_version__ = "3.3.0"
 
