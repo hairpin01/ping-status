@@ -5,10 +5,10 @@
 # 📦 Installation
 ```bash
 # Download the
-curl -O https://raw.githubusercontent.com/hairpin01/ping-status/main/install.sh | bash
+curl -O https://raw.githubusercontent.com/hairpin01/ping-status/dev/install.sh | bash
 ```
 > [!NOTE]
-> Or via wget `wget https://raw.githubusercontent.com/hairpin01/ping-status/main/install.sh`
+> Or via wget `wget https://raw.githubusercontent.com/hairpin01/ping-status/dev/install.sh`
 # Run the
 `chmod +x installation install.sh`
 
@@ -188,4 +188,25 @@ api_key = YOUR_API_KEY_HERE
 city = Moscow
 units = metric
 lang = en
+```
+### dev branch
+```
+curl -O https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/dev/install.sh | bash
+```
+## custom repo | setting install_plugin for repo
+add the value to the cfg
+`[plugin-repo]`
+```
+# Base URL for plugins (leave it empty for the standard one)
+base_url = https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/dev
+```
+```
+# Download timeout in seconds
+timeout = 10
+```
+> [!TIP]
+> set the value enabled to true if you have specified a custom repository.
+```
+# Enable custom repository (true/false)
+enabled = true
 ```
