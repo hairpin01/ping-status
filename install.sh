@@ -17,8 +17,8 @@ THEMES_BASE_URL="https://raw.githubusercontent.com/hairpin01/ping-status/refs/he
 # Available themes
 declare -A THEMES=(
     ["minimal"]="Минималистичная тема в одну строку"
-    ["detailed"]="Подробная тема с рамкой"
-    ["modern"]="Современная тема с иконками" 
+    ["detailed"]="Подробная тема"
+    ["modern"]="Современная тема" 
     ["classic"]="Классическая тема"
     ["terminal"]="Тема в стиле терминала"
 )
