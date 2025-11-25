@@ -19,6 +19,7 @@ import difflib
 from urllib.error import URLError, HTTPError
 
 __version__ = "3.3.5"
+__build_info__ = "build #0100"
 __author__ = "hairpin01"
 
 # URLs для обновления
@@ -527,49 +528,81 @@ def show_status():
         output = apply_global_colors(output, global_color)
     
     print(output)
-def get_plugin_repository():
-    """Получить настройки репозитория плагинов из конфига"""
-    config_path = Path.home() / '.config' / 'ping-status.conf'
-    if not config_path.exists():
-        config_path = Path('/etc/ping-status.conf')
+def get_available_plugins():
+    """Получить список доступных плагинов из GitHub"""
+    repo_config = get_plugin_repository()
+    base_url = repo_config['base_url']
+    timeout = repo_config['timeout']
     
-    config = configparser.ConfigParser()
-    config.read(config_path)
-    
-    # Получаем настройки с проверкой наличия секции и опций
-    base_url = ""
-    timeout = 10
-    enabled = True
-    
-    if config.has_section('plugin-repo'):
-        try:
-            base_url = config.get('plugin-repo', 'base_url')
-        except (configparser.NoOptionError, configparser.NoSectionError):
-            base_url = ""
-        
-        try:
-            timeout = config.getint('plugin-repo', 'timeout')
-        except (configparser.NoOptionError, configparser.NoSectionError):
-            timeout = 10
-        
-        try:
-            enabled = config.getboolean('plugin-repo', 'enabled')
-        except (configparser.NoOptionError, configparser.NoSectionError):
-            enabled = True
-    
-    # Если URL не указан или репозиторий отключен, используем стандартный
-    if not base_url or not enabled:
+    # Если репозиторий отключен, используем стандартный
+    if not repo_config['enabled']:
         base_url = "https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/main"
     
-    # Убедимся что URL заканчивается правильно
-    if not base_url.endswith('/'):
-        base_url += '/'
+    plugins = {}
     
-    return {
-        'base_url': base_url,
-        'timeout': timeout,
-        'enabled': enabled
-    }
+    try:
+        # Проверяем, является ли base_url GitHub raw URL
+        if 'raw.githubusercontent.com' in base_url:
+            # Преобразуем raw URL в API URL
+            # Пример: https://raw.githubusercontent.com/user/repo/branch/path
+            # -> https://api.github.com/repos/user/repo/contents/path?ref=branch
+            base_url = base_url.rstrip('/')
+            path = base_url.replace('https://raw.githubusercontent.com/', '')
+            parts = path.split('/')
+            
+            if len(parts) < 3:
+                raise ValueError("Invalid raw GitHub URL")
+                
+            user = parts[0]
+            repo = parts[1]
+            branch = parts[2]
+            path_parts = parts[3:] if len(parts) > 3 else ['plugins']
+            
+            # Обрабатываем случай с refs/heads
+            if branch == 'refs':
+                if len(parts) >= 5 and parts[3] == 'heads':
+                    branch = parts[4]
+                    path_parts = parts[5:] if len(parts) > 5 else ['plugins']
+                else:
+                    raise ValueError("Invalid refs path in GitHub URL")
+            
+            content_path = '/'.join(path_parts)
+            api_url = f"https://api.github.com/repos/{user}/{repo}/contents/{content_path}?ref={branch}"
+            
+        elif 'api.github.com' in base_url:
+            api_url = base_url
+        else:
+            print_colored("❌ Не-GitHub репозитории пока не поддерживаются", 'red')
+            return {}
+        
+        # Загружаем с таймаутом
+        with urllib.request.urlopen(api_url, timeout=timeout) as response:
+            contents = json.loads(response.read().decode('utf-8'))
+            
+            for item in contents:
+                if item['name'].endswith('.py'):
+                    plugin_name = item['name'].replace('.py', '')
+                    # Убираем .plugin если есть в имени
+                    if plugin_name.endswith('.plugin'):
+                        plugin_name = plugin_name[:-7]
+                    plugins[plugin_name] = item['download_url']
+        
+        return plugins
+        
+    except Exception as e:
+        print_colored(f"❌ Не удалось получить список плагинов: {e}", 'red')
+        
+        # Возвращаем базовый список как fallback
+        fallback_plugins = {
+            "system-info": "https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/main/plugins/system-info.plugin.py",
+            "weather": "https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/main/plugins/weather.plugin.py",
+            "multi-ping": "https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/main/plugins/multi-ping.plugin.py",
+            "network-speed": "https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/main/plugins/network-speed.plugin.py",
+            "crypto-prices": "https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/main/plugins/crypto-prices.plugin.py"
+        }
+        
+        print_colored("📋 Используется базовый список плагинов", 'blue')
+        return fallback_plugins
 
 def show_plugin_repo_info():
     """Показать информацию о репозитории плагинов"""
@@ -914,7 +947,7 @@ def uninstall():
 
 def show_version():
     """Показать информацию о версии"""
-    print_colored(f"Ping Status Monitor v{__version__}", 'cyan')
+    print_colored(f"Ping Status Monitor v{__version__} [{__build_info__}]", 'cyan')
     print_colored(f"Автор: {__author__}", 'blue')
     print_colored("GitHub: https://github.com/hairpin01/ping-status", 'blue')
 
@@ -1086,62 +1119,76 @@ def apply_theme_from_url(theme_url, theme_name="custom"):
         return False
 
 def get_available_plugins():
-    """Получить список доступных плагинов с поддержкой кастомных репозиториев"""
+    """Получить список доступных плагинов из GitHub"""
     repo_config = get_plugin_repository()
     base_url = repo_config['base_url']
     timeout = repo_config['timeout']
     
+    # Если репозиторий отключен, используем стандартный
+    if not repo_config['enabled']:
+        base_url = "https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/main"
+    
     plugins = {}
     
     try:
-        # Формируем URL для API GitHub или прямого доступа
-        if 'github.com' in base_url:
-            # Используем GitHub API
-            repo_path = base_url.replace('https://raw.githubusercontent.com/', '')
-            if '/main' in repo_path or '/master' in repo_path:
-                api_url = f"https://api.github.com/repos/{repo_path.replace('/main', '').replace('/master', '')}/contents/plugins"
-            else:
-                api_url = f"https://api.github.com/repos/{repo_path}/contents/plugins"
+        # Проверяем, является ли base_url GitHub raw URL
+        if 'raw.githubusercontent.com' in base_url:
+            # Преобразуем raw URL в API URL
+            # Пример: https://raw.githubusercontent.com/user/repo/branch/path
+            # -> https://api.github.com/repos/user/repo/contents/path?ref=branch
+            base_url = base_url.rstrip('/')
+            path = base_url.replace('https://raw.githubusercontent.com/', '')
+            parts = path.split('/')
+            
+            if len(parts) < 3:
+                raise ValueError("Invalid raw GitHub URL")
+                
+            user = parts[0]
+            repo = parts[1]
+            branch = parts[2]
+            path_parts = parts[3:] if len(parts) > 3 else ['plugins']
+            
+            # Обрабатываем случай с refs/heads
+            if branch == 'refs':
+                if len(parts) >= 5 and parts[3] == 'heads':
+                    branch = parts[4]
+                    path_parts = parts[5:] if len(parts) > 5 else ['plugins']
+                else:
+                    raise ValueError("Invalid refs path in GitHub URL")
+            
+            content_path = '/'.join(path_parts)
+            api_url = f"https://api.github.com/repos/{user}/{repo}/contents/{content_path}?ref={branch}"
+            
+        elif 'api.github.com' in base_url:
+            api_url = base_url
         else:
-            # Для кастомных репозиториев пытаемся получить listing
-            api_url = f"{base_url}plugins/"
+            print_colored("❌ Не-GitHub репозитории пока не поддерживаются", 'red')
+            return {}
         
         # Загружаем с таймаутом
         with urllib.request.urlopen(api_url, timeout=timeout) as response:
-            if 'github.com' in base_url:
-                contents = json.loads(response.read().decode('utf-8'))
-                
-                for item in contents:
-                    if item['name'].endswith('.py'):
-                        plugin_name = item['name'].replace('.py', '')
-                        # Убираем .plugin если есть в имени
-                        if plugin_name.endswith('.plugin'):
-                            plugin_name = plugin_name[:-7]
-                        plugins[plugin_name] = item['download_url']
-            else:
-                # Для кастомных репозиториев - простая реализация
-                content = response.read().decode('utf-8')
-                # Парсим HTML или простой список файлов
-                import re
-                plugin_files = re.findall(r'href="([^"]+\.py)"', content)
-                for file in plugin_files:
-                    plugin_name = file.replace('.py', '')
+            contents = json.loads(response.read().decode('utf-8'))
+            
+            for item in contents:
+                if item['name'].endswith('.py'):
+                    plugin_name = item['name'].replace('.py', '')
+                    # Убираем .plugin если есть в имени
                     if plugin_name.endswith('.plugin'):
                         plugin_name = plugin_name[:-7]
-                    plugins[plugin_name] = f"{base_url}plugins/{file}"
+                    plugins[plugin_name] = item['download_url']
         
         return plugins
         
-    except (URLError, HTTPError, Exception) as e:
-        print_colored(f"⚠️  Не удалось загрузить список плагинов: {e}", 'yellow')
+    except Exception as e:
+        print_colored(f"❌ Не удалось получить список плагинов: {e}", 'red')
         
         # Возвращаем базовый список как fallback
         fallback_plugins = {
-            "system-info": f"{base_url}plugins/system-info.plugin.py",
-            "weather": f"{base_url}plugins/weather.plugin.py", 
-            "multi-ping": f"{base_url}plugins/multi-ping.plugin.py",
-            "network-speed": f"{base_url}plugins/network-speed.plugin.py",
-            "crypto-prices": f"{base_url}plugins/crypto-prices.plugin.py"
+            "system-info": "https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/main/plugins/system-info.plugin.py",
+            "weather": "https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/main/plugins/weather.plugin.py",
+            "multi-ping": "https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/main/plugins/multi-ping.plugin.py",
+            "network-speed": "https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/main/plugins/network-speed.plugin.py",
+            "crypto-prices": "https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/main/plugins/crypto-prices.plugin.py"
         }
         
         print_colored("📋 Используется базовый список плагинов", 'blue')
