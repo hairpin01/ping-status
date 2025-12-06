@@ -148,6 +148,31 @@ def load_plugins():
 
     return plugins_data
 
+def get_plugin_repository():
+    """Получить настройки репозитория плагинов из конфига"""
+    config_path = Path.home() / '.config' / 'ping-status.conf'
+
+    if not config_path.exists():
+        config_path = Path('/etc/ping-status.conf')
+
+    config = configparser.ConfigParser()
+    config.read(config_path)
+
+    # Значения по умолчанию
+    base_url = config.get('plugin-repo', 'base_url',
+                         fallback='https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/main')
+    timeout = config.getint('plugin-repo', 'timeout', fallback=10)
+    enabled = config.getboolean('plugin-repo', 'enabled', fallback=True)
+
+    return {
+        'base_url': base_url,
+        'timeout': timeout,
+        'enabled': enabled
+    }
+
+
+
+
 def check_plugin_update(plugin_path):
     """Проверить наличие обновлений для плагина"""
     metadata = get_plugin_metadata(plugin_path)
