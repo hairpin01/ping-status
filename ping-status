@@ -62,7 +62,49 @@ def get_plugin_metadata(plugin_path):
     
     return metadata
 
-# Добавим функцию для проверки обновлений плагина
+def load_config():
+    config_path = Path.home() / '.config' / 'ping-status.conf'
+
+    if not config_path.exists():
+        config_path = Path('/etc/ping-status.conf')
+
+    config = configparser.ConfigParser()
+    config.read(config_path)
+
+    host = config.get('settings', 'host', fallback='google.com')
+    template = config.get('settings', 'text', fallback='Ping: {ping}\nUptime: {uptime}\nUser: {user}\nHostname: {hostname}')
+
+    # Основные цвета
+    ping_color = config.get('colors', 'ping', fallback='green')
+    uptime_color = config.get('colors', 'uptime', fallback='yellow')
+    user_color = config.get('colors', 'user', fallback='blue')
+    hostname_color = config.get('colors', 'hostname', fallback='cyan')
+
+    # Расширенные цвета
+    global_color = config.get('colors-plus', 'global', fallback='')
+    background_color = config.get('colors-plus', 'background', fallback='')
+
+    # Загружаем настройки плагинов
+    plugins_enabled = config.get('plugins', 'enabled', fallback='system-info,weather').split(',')
+
+    return {
+        'host': host,
+        'template': template,
+        'colors': {
+            'ping': ping_color,
+            'uptime': uptime_color,
+            'user': user_color,
+            'hostname': hostname_color
+        },
+        'colors_plus': {
+            'global': global_color,
+            'background': background_color
+        },
+        'plugins_enabled': [p.strip() for p in plugins_enabled]
+    }
+
+
+
 def check_plugin_update(plugin_path):
     """Проверить наличие обновлений для плагина"""
     metadata = get_plugin_metadata(plugin_path)
@@ -143,7 +185,7 @@ def update_all_plugins():
     
     return plugins_updated > 0
 
-# Добавим функцию для обновления конкретного плагина
+
 def update_plugin(plugin_name):
     """Обновить конкретный плагин"""
     plugins_dir = Path.home() / '.config' / 'ping-status' / 'plugins'
@@ -386,10 +428,7 @@ def get_uptime():
                 try:
                     result = method()
                     if result.returncode == 0:
-                        # Здесь нужно добавить парсинг конкретного вывода
-                        # Это упрощенная версия
                         current_time = time.time()
-                        # Предполагаем, что система загружена не менее 1 минуты
                         return "1m+"
                 except:
                     continue
@@ -398,46 +437,7 @@ def get_uptime():
         except:
             return "unknown"
 
-def load_config():
-    config_path = Path.home() / '.config' / 'ping-status.conf'
-    
-    if not config_path.exists():
-        config_path = Path('/etc/ping-status.conf')
-    
-    config = configparser.ConfigParser()
-    config.read(config_path)
-    
-    host = config.get('settings', 'host', fallback='google.com')
-    template = config.get('settings', 'text', fallback='Ping: {ping}\nUptime: {uptime}\nUser: {user}\nHostname: {hostname}')
-    
-    # Основные цвета
-    ping_color = config.get('colors', 'ping', fallback='green')
-    uptime_color = config.get('colors', 'uptime', fallback='yellow')
-    user_color = config.get('colors', 'user', fallback='blue')
-    hostname_color = config.get('colors', 'hostname', fallback='cyan')
-    
-    # Расширенные цвета
-    global_color = config.get('colors-plus', 'global', fallback='')
-    background_color = config.get('colors-plus', 'background', fallback='')
-    
-    # Загружаем настройки плагинов
-    plugins_enabled = config.get('plugins', 'enabled', fallback='system-info,weather').split(',')
-    
-    return {
-        'host': host,
-        'template': template,
-        'colors': {
-            'ping': ping_color,
-            'uptime': uptime_color,
-            'user': user_color,
-            'hostname': hostname_color
-        },
-        'colors_plus': {
-            'global': global_color,
-            'background': background_color
-        },
-        'plugins_enabled': [p.strip() for p in plugins_enabled]
-    }
+
 
 def load_plugins():
     """Загрузить все плагины из директории плагинов"""
