@@ -104,6 +104,49 @@ def load_config():
     }
 
 
+def load_plugins():
+    """Загрузить все плагины из директории плагинов"""
+    config = load_config()
+    plugins_dir = Path.home() / '.config' / 'ping-status' / 'plugins'
+    plugins_dir.mkdir(parents=True, exist_ok=True)
+
+    plugins_data = {}
+    loaded_plugins = []
+
+    for plugin_file in plugins_dir.glob('*.py'):
+        plugin_name = plugin_file.stem
+
+        # Проверяем, включен ли плагин в конфиге
+        enabled_plugins = [p.replace('.plugin', '') for p in config['plugins_enabled']]
+        if plugin_name not in enabled_plugins and 'all' not in config['plugins_enabled']:
+            continue
+
+        try:
+            # Динамическая загрузка плагина
+            spec = importlib.util.spec_from_file_location(plugin_name, plugin_file)
+            plugin_module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(plugin_module)
+
+            # Проверка версии плагина
+            if hasattr(plugin_module, '__min_version__'):
+                if not version_check(plugin_module.__min_version__, f"Plugin '{plugin_name}'"):
+                    continue
+
+            # Вызов функции register плагина
+            if hasattr(plugin_module, 'register'):
+                plugin_data = plugin_module.register()
+                if isinstance(plugin_data, dict):
+                    plugins_data.update(plugin_data)
+                    loaded_plugins.append(plugin_name)
+                else:
+                    print_colored(f"❌ Плагин {plugin_name} вернул неверный формат", 'yellow')
+            else:
+                print_colored(f"❌ Плагин {plugin_name} не имеет функции register", 'yellow')
+
+        except Exception as e:
+            print_colored(f"❌ Ошибка загрузки плагина {plugin_name}: {e}", 'red')
+
+    return plugins_data
 
 def check_plugin_update(plugin_path):
     """Проверить наличие обновлений для плагина"""
@@ -439,49 +482,6 @@ def get_uptime():
 
 
 
-def load_plugins():
-    """Загрузить все плагины из директории плагинов"""
-    config = load_config()
-    plugins_dir = Path.home() / '.config' / 'ping-status' / 'plugins'
-    plugins_dir.mkdir(parents=True, exist_ok=True)
-    
-    plugins_data = {}
-    loaded_plugins = []
-    
-    for plugin_file in plugins_dir.glob('*.py'):
-        plugin_name = plugin_file.stem
-        
-        # Проверяем, включен ли плагин в конфиге
-        enabled_plugins = [p.replace('.plugin', '') for p in config['plugins_enabled']]
-        if plugin_name not in enabled_plugins and 'all' not in config['plugins_enabled']:
-            continue
-            
-        try:
-            # Динамическая загрузка плагина
-            spec = importlib.util.spec_from_file_location(plugin_name, plugin_file)
-            plugin_module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(plugin_module)
-            
-            # Проверка версии плагина
-            if hasattr(plugin_module, '__min_version__'):
-                if not version_check(plugin_module.__min_version__, f"Plugin '{plugin_name}'"):
-                    continue
-            
-            # Вызов функции register плагина
-            if hasattr(plugin_module, 'register'):
-                plugin_data = plugin_module.register()
-                if isinstance(plugin_data, dict):
-                    plugins_data.update(plugin_data)
-                    loaded_plugins.append(plugin_name)
-                else:
-                    print_colored(f"❌ Плагин {plugin_name} вернул неверный формат", 'yellow')
-            else:
-                print_colored(f"❌ Плагин {plugin_name} не имеет функции register", 'yellow')
-                
-        except Exception as e:
-            print_colored(f"❌ Ошибка загрузки плагина {plugin_name}: {e}", 'red')
-    
-    return plugins_data
 
 def show_status():
     config = load_config()
