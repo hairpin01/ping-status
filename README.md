@@ -210,7 +210,7 @@ lang = en
 ```
 ### dev branch
 ```
-curl -O https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/dev/install.sh | bash
+curl https://raw.githubusercontent.com/hairpin01/ping-status/refs/heads/dev/install.sh | bash
 ```
 ## custom repo | setting install_plugin for repo
 add the value to the cfg
