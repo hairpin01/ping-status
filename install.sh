@@ -57,8 +57,6 @@ detect_distro() {
     echo $DISTRO
 }
 
-# Function to install dependencies
-# Функция install_dependencies - замени эту функцию в install.sh
 
 install_dependencies() {
     local distro=$1
